@@ -35,6 +35,7 @@ a{color:inherit}
 .login-caption{position:relative;z-index:1;font-size:12px;color:#71849a}
 .login-card-wrap{padding:48px;display:flex;align-items:center;justify-content:center}.login-card{width:100%;max-width:360px}
 .login-card h2{margin:0 0 8px;font-size:24px}.login-card p{margin:0 0 24px;color:var(--muted);line-height:1.6}.demo-note{font-size:12px;background:#f7f9fc;border:1px solid var(--line);padding:10px 12px;border-radius:8px;margin-top:12px;color:var(--muted)}
+.login-form{display:grid;gap:15px}.login-field label{display:block;font-size:12px;font-weight:700;margin-bottom:7px}.login-field input{width:100%;height:43px;border:1px solid #cfd9e5;border-radius:8px;padding:10px 12px;background:#fff;color:var(--text)}.login-field input:focus{outline:2px solid rgba(18,101,216,.15);border-color:var(--blue)}.password-wrap{position:relative}.password-wrap input{padding-right:92px}.password-toggle{position:absolute;right:5px;top:5px;height:33px;padding:0 10px;border:0;border-radius:6px;background:#f2f6fb;color:var(--blue);font-size:11px;font-weight:700}.password-toggle:hover{background:#e9f1fa}.login-error{min-height:17px;margin-top:-3px;color:var(--danger);font-size:11px;line-height:1.45}
 
 .app-shell{min-height:100vh;display:grid;grid-template-columns:220px 1fr}
 .sidebar{background:linear-gradient(180deg,var(--navy-2),var(--navy));color:#fff;padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}

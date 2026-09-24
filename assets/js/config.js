@@ -9,11 +9,18 @@ window.APP_CONFIG = Object.freeze({
   TIME_ZONE: 'Asia/Jakarta',
   LOCALE: 'id-ID',
 
-  // Static GitHub Pages MVP. Set GOOGLE_CLIENT_ID to enable the Google Identity UI.
-  // Production authorization still needs server-side/token verification.
-  GOOGLE_CLIENT_ID: '',
-  ALLOWED_GOOGLE_DOMAIN: 'pkp.go.id',
-  DEMO_LOGIN_ENABLED: true,
+  // Login username/password untuk MVP statis GitHub Pages.
+  // Password tidak disimpan dalam plaintext, tetapi autentikasi client-side tetap BUKAN
+  // kontrol akses yang aman. Untuk produksi internal, verifikasi kredensial harus dipindahkan ke backend.
+  AUTH_USERS: Object.freeze([
+    Object.freeze({
+      username: 'pusdatin',
+      displayName: 'Administrator Pusdatin',
+      // SHA-256 untuk password awal: Pusdatin2026!
+      // GANTI hash ini sebelum deployment produksi.
+      passwordSha256: '4ae2b14787ca2214866b548049873a83572d6aac343f7bdc3fb8e2336b1f6b0a'
+    })
+  ]),
 
   RESPONSIBLE_TITLE_1: 'Pejabat yang Bertanggung Jawab',
   RESPONSIBLE_TITLE_2: 'Kepala Pusat Data dan Informasi',

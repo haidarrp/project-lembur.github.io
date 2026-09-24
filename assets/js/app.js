@@ -78,7 +78,7 @@
         </aside>
         <main class="main">
           <header class="topbar">
-            <div class="user-menu"><div class="avatar">${userInitial()}</div><div class="user-meta"><div>${esc(state.session?.name || 'Pengguna Internal')}</div><div class="user-email">${esc(state.session?.email || 'mode demo')}</div></div><button class="link-button" data-action="logout">Keluar</button></div>
+            <div class="user-menu"><div class="avatar">${userInitial()}</div><div class="user-meta"><div>${esc(state.session?.name || 'Pengguna Internal')}</div><div class="user-email">${esc(state.session?.username ? '@' + state.session.username : 'akun lokal')}</div></div><button class="link-button" data-action="logout">Keluar</button></div>
           </header>
           <section class="content">${content}</section>
         </main>
@@ -99,9 +99,23 @@
             <div class="login-caption">MVP internal · File presensi diproses pada browser dan tidak dikirim ke server oleh aplikasi ini.</div>
           </div>
           <div class="login-card-wrap"><div class="login-card">
-            <h2>Masuk ke Sistem</h2><p>Gunakan akun kedinasan untuk mengakses Generator Dokumen Lembur.</p>
-            <button class="btn btn-primary btn-block" data-action="login">G&nbsp;&nbsp; Masuk dengan Google</button>
-            ${cfg.GOOGLE_CLIENT_ID ? '' : '<div class="demo-note">Google Client ID belum dikonfigurasi. Tombol masuk berjalan dalam mode demo untuk pengujian GitHub Pages.</div>'}
+            <h2>Masuk ke Sistem</h2><p>Masukkan username dan password untuk mengakses Generator Dokumen Lembur.</p>
+            <form id="login-form" class="login-form" novalidate>
+              <div class="login-field">
+                <label for="login-username">Username</label>
+                <input id="login-username" name="username" type="text" autocomplete="username" spellcheck="false" placeholder="Masukkan username" required autofocus>
+              </div>
+              <div class="login-field">
+                <label for="login-password">Password</label>
+                <div class="password-wrap">
+                  <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Masukkan password" required>
+                  <button type="button" class="password-toggle" data-action="toggle-password" aria-label="Tampilkan password">Lihat</button>
+                </div>
+              </div>
+              <div id="login-error" class="login-error" role="alert" aria-live="polite"></div>
+              <button class="btn btn-primary btn-block" type="submit" data-action="login">Masuk</button>
+            </form>
+            <div class="demo-note">Login ini ditujukan untuk MVP GitHub Pages. Untuk penggunaan produksi internal, autentikasi perlu diverifikasi oleh backend.</div>
           </div></div>
         </div>
       </section>`;
@@ -327,31 +341,72 @@
     state.view='process'; state.processStep='result'; state.period={...run.period}; state.employees=run.employees; state.currentRun=run; state.generated=null; state.resultFromHistory=true; render();
   }
 
-  function demoLogin() {
-    storage.setSession({ name:'Pengguna Internal', email:'akun@pkp.go.id', mode:'demo' }); state.session=storage.getSession(); render();
+  async function sha256Hex(value) {
+    const bytes = new TextEncoder().encode(String(value));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
-  function initGoogleLogin() {
-    if (!cfg.GOOGLE_CLIENT_ID) return demoLogin();
-    if (window.google?.accounts?.id) return requestGoogleCredential();
-    const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true; s.onload=requestGoogleCredential; s.onerror=()=>alert('Google Identity Services gagal dimuat.'); document.head.appendChild(s);
+  async function loginWithPassword(event) {
+    event?.preventDefault();
+    const usernameInput = document.getElementById('login-username');
+    const passwordInput = document.getElementById('login-password');
+    const errorEl = document.getElementById('login-error');
+    const submitButton = document.querySelector('[data-action="login"]');
+    const username = String(usernameInput?.value || '').trim();
+    const password = String(passwordInput?.value || '');
+
+    if (errorEl) errorEl.textContent = '';
+    if (!username || !password) {
+      if (errorEl) errorEl.textContent = 'Username dan password wajib diisi.';
+      return;
+    }
+
+    try {
+      if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Memeriksa...'; }
+      const passwordSha256 = await sha256Hex(password);
+      const account = (cfg.AUTH_USERS || []).find((item) =>
+        String(item.username || '').toLowerCase() === username.toLowerCase() &&
+        String(item.passwordSha256 || '').toLowerCase() === passwordSha256
+      );
+
+      if (!account) {
+        if (errorEl) errorEl.textContent = 'Username atau password tidak sesuai.';
+        if (passwordInput) { passwordInput.value = ''; passwordInput.focus(); }
+        return;
+      }
+
+      storage.setSession({
+        name: account.displayName || account.username,
+        username: account.username,
+        mode: 'local-password'
+      });
+      state.session = storage.getSession();
+      render();
+    } catch (error) {
+      if (errorEl) errorEl.textContent = 'Login gagal diproses pada browser ini.';
+    } finally {
+      const currentButton = document.querySelector('[data-action="login"]');
+      if (currentButton) { currentButton.disabled = false; currentButton.textContent = 'Masuk'; }
+    }
   }
 
-  function requestGoogleCredential() {
-    google.accounts.id.initialize({client_id:cfg.GOOGLE_CLIENT_ID,callback:(response)=>{
-      try {
-        const payload=JSON.parse(decodeURIComponent(escape(atob(response.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))));
-        if (cfg.ALLOWED_GOOGLE_DOMAIN && payload.hd && payload.hd!==cfg.ALLOWED_GOOGLE_DOMAIN) throw new Error('Gunakan akun domain kedinasan yang diizinkan.');
-        storage.setSession({name:payload.name||payload.email,email:payload.email||'',picture:payload.picture||'',mode:'gis'}); state.session=storage.getSession(); render();
-      } catch(e) { alert(e.message||String(e)); }
-    }});
-    google.accounts.id.prompt();
+  function togglePasswordVisibility() {
+    const input = document.getElementById('login-password');
+    const button = document.querySelector('[data-action="toggle-password"]');
+    if (!input || !button) return;
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    button.textContent = showing ? 'Lihat' : 'Sembunyikan';
+    button.setAttribute('aria-label', showing ? 'Tampilkan password' : 'Sembunyikan password');
+    input.focus();
   }
 
   function bindEvents() {
     document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',()=>{ const target=btn.dataset.nav; if(target==='process') resetProcess(); else state.view=target; render(); }));
     document.querySelector('[data-action="logout"]')?.addEventListener('click',()=>{ storage.clearSession(); state.session=null; render(); });
-    document.querySelector('[data-action="login"]')?.addEventListener('click',initGoogleLogin);
+    document.getElementById('login-form')?.addEventListener('submit', loginWithPassword);
+    document.querySelector('[data-action="toggle-password"]')?.addEventListener('click', togglePasswordVisibility);
     document.querySelector('[data-action="start-process"]')?.addEventListener('click',()=>{ resetProcess(); render(); });
     document.querySelector('[data-action="period-next"]')?.addEventListener('click',()=>{ state.period.month=Number(document.getElementById('period-month').value); state.period.year=Number(document.getElementById('period-year').value); state.processStep='upload'; render(); });
     document.querySelector('[data-action="back-period"]')?.addEventListener('click',()=>{ state.processStep='period'; render(); });
