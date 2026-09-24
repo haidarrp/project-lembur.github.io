@@ -1,0 +1,380 @@
+(function () {
+  'use strict';
+
+  const cfg = window.APP_CONFIG;
+  const rules = window.BusinessRules;
+  const parser = window.ExcelParser;
+  const generator = window.DocumentGenerator;
+  const storage = window.AppStorage;
+  const app = document.getElementById('app');
+
+  const state = {
+    session: storage.getSession(),
+    view: 'dashboard',
+    processStep: 'period',
+    period: { month: new Date().getMonth() + 1, year: new Date().getFullYear() },
+    files: [],
+    validation: null,
+    employees: [],
+    filter: '',
+    drawerKey: null,
+    processing: { percent: 0, active: 0 },
+    generated: null,
+    currentRun: null,
+    resultFromHistory: false,
+    busy: false
+  };
+
+  function esc(value) {
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function periodLabel(period) {
+    return `${cfg.INDONESIAN_MONTHS[period.month - 1]} ${period.year}`;
+  }
+
+  function formatDateTime(iso) {
+    try {
+      return new Intl.DateTimeFormat('id-ID', {
+        timeZone: cfg.TIME_ZONE, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      }).format(new Date(iso));
+    } catch (_) {
+      return new Date(iso).toLocaleString('id-ID');
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (!Number.isFinite(bytes)) return '-';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  function userInitial() {
+    const name = state.session && state.session.name ? state.session.name : 'Pengguna';
+    return name.trim().charAt(0).toUpperCase() || 'P';
+  }
+
+  function shell(content) {
+    const nav = [
+      ['dashboard', '⌂', 'Dashboard'],
+      ['process', '▣', 'Proses Lembur'],
+      ['history', '▤', 'Riwayat']
+    ];
+    const active = state.view === 'process' ? 'process' : state.view;
+    return `
+      <div class="app-shell">
+        <aside class="sidebar">
+          <div class="sidebar-brand">
+            <img src="assets/img/mark.svg" alt="PKP">
+            <div><div class="sidebar-title">Generator<br>Dokumen Lembur</div><div class="sidebar-subtitle">Pusdatin PKP</div></div>
+          </div>
+          <nav class="nav">
+            ${nav.map(([id, icon, label]) => `<button class="nav-button ${active === id ? 'active' : ''}" data-nav="${id}"><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span></button>`).join('')}
+          </nav>
+          <div class="sidebar-footer">Pusat Data dan Informasi<br>Kementerian PKP</div>
+        </aside>
+        <main class="main">
+          <header class="topbar">
+            <div class="user-menu"><div class="avatar">${userInitial()}</div><div class="user-meta"><div>${esc(state.session?.name || 'Pengguna Internal')}</div><div class="user-email">${esc(state.session?.email || 'mode demo')}</div></div><button class="link-button" data-action="logout">Keluar</button></div>
+          </header>
+          <section class="content">${content}</section>
+        </main>
+      </div>
+      ${renderDrawer()}
+    `;
+  }
+
+  function renderLogin() {
+    app.innerHTML = `
+      <section class="login-shell">
+        <div class="login-panel">
+          <div class="login-visual">
+            <div class="brand-block">
+              <div class="brand-row"><img class="brand-mark" src="assets/img/mark.svg" alt="PKP"><div><div class="brand-kicker">Kementerian Perumahan dan Kawasan Permukiman</div><div style="font-size:12px;color:#6b7c93;margin-top:3px">Pusat Data dan Informasi</div></div></div>
+              <h1>Generator Dokumen Lembur</h1><p>Pengolahan presensi, review lembur, dan pembuatan dokumen dalam satu alur.</p>
+            </div>
+            <div class="login-caption">MVP internal · File presensi diproses pada browser dan tidak dikirim ke server oleh aplikasi ini.</div>
+          </div>
+          <div class="login-card-wrap"><div class="login-card">
+            <h2>Masuk ke Sistem</h2><p>Gunakan akun kedinasan untuk mengakses Generator Dokumen Lembur.</p>
+            <button class="btn btn-primary btn-block" data-action="login">G&nbsp;&nbsp; Masuk dengan Google</button>
+            ${cfg.GOOGLE_CLIENT_ID ? '' : '<div class="demo-note">Google Client ID belum dikonfigurasi. Tombol masuk berjalan dalam mode demo untuk pengujian GitHub Pages.</div>'}
+          </div></div>
+        </div>
+      </section>`;
+    bindEvents();
+  }
+
+  function renderDashboard() {
+    const history = storage.listHistory();
+    const latest = history[0];
+    const summary = latest?.summary || { employees: 0, overtimeEmployees: 0, totalHours: 0, mealDays: 0 };
+    const content = `
+      <div class="page-title"><div><h2>Dashboard</h2><p>Ringkasan pengolahan dokumen lembur pegawai.</p></div></div>
+      <div class="card hero-card"><div class="hero-icon">▤</div><div><h3>Proses Lembur Baru</h3><p>Upload file presensi pegawai, review hasil, lalu generate dokumen.</p></div><button class="btn btn-primary" data-action="start-process">＋ Proses Lembur</button></div>
+      <div class="section-gap card">
+        ${latest ? `<div class="recent-period"><div><div class="period-name">${esc(periodLabel(latest.period))}</div><div class="period-time">Diproses ${esc(formatDateTime(latest.processedAt))}</div></div><button class="btn btn-secondary btn-sm" data-history-id="${esc(latest.id)}">Lihat Hasil →</button></div>` : '<div class="empty-state"><strong>Belum ada proses tersimpan</strong>Riwayat pemrosesan akan tampil setelah dokumen pertama dibuat.</div>'}
+      </div>
+      <div class="grid-4 section-gap">
+        ${metric(summary.employees, 'Pegawai')}${metric(summary.overtimeEmployees, 'Pegawai Lembur')}${metric(summary.totalHours, 'Total Jam Lembur')}${metric(summary.mealDays, 'Hari Uang Makan')}
+      </div>
+      <div class="footer-note">Riwayat MVP disimpan di localStorage browser. File presensi asli tidak disimpan setelah halaman ditutup.</div>`;
+    app.innerHTML = shell(content); bindEvents();
+  }
+
+  function metric(value, label) {
+    return `<div class="card metric"><div class="metric-label">${esc(label)}</div><div class="metric-value">${Number(value || 0)}</div></div>`;
+  }
+
+  function stepper(active) {
+    const steps = [['period','Periode'],['upload','Upload'],['review','Review'],['result','Hasil']];
+    const order = { period:0, upload:1, validation:1, processing:1, review:2, confirm:2, result:3 };
+    const idx = order[active] ?? 0;
+    return `<div class="card stepper">${steps.map((s,i) => `${i ? '<div class="step-line"></div>' : ''}<div class="step ${i < idx ? 'done' : i === idx ? 'active' : ''}"><span class="step-dot">${i < idx ? '✓' : i+1}</span><span class="step-label">${s[1]}</span></div>`).join('')}</div>`;
+  }
+
+  function renderProcess() {
+    let body = '';
+    switch (state.processStep) {
+      case 'period': body = renderPeriod(); break;
+      case 'upload': body = renderUpload(); break;
+      case 'validation': body = renderValidation(); break;
+      case 'processing': body = renderProcessing(); break;
+      case 'review': body = renderReview(); break;
+      case 'confirm': body = renderConfirm(); break;
+      case 'result': body = renderResult(); break;
+      default: body = renderPeriod();
+    }
+    app.innerHTML = shell(`${stepper(state.processStep)}${body}`); bindEvents();
+  }
+
+  function renderPeriod() {
+    const months = cfg.INDONESIAN_MONTHS.map((m,i) => `<option value="${i+1}" ${state.period.month===i+1?'selected':''}>${m}</option>`).join('');
+    const y = new Date().getFullYear();
+    const years = Array.from({length:7},(_,i)=>y-3+i).map(v=>`<option ${state.period.year===v?'selected':''}>${v}</option>`).join('');
+    return `<div class="page-title"><div><h2>Proses Lembur Baru</h2><p>Tentukan periode data presensi yang akan diproses.</p></div></div>
+      <div class="card card-pad"><div class="card-title">Periode Lembur</div><div class="card-subtitle">Bulan dan tahun digunakan untuk memfilter data pada setiap file presensi.</div>
+      <div class="form-grid section-gap"><div class="field"><label>Bulan</label><select id="period-month">${months}</select></div><div class="field"><label>Tahun</label><select id="period-year">${years}</select></div></div>
+      <div class="actions"><span></span><button class="btn btn-primary" data-action="period-next">Selanjutnya →</button></div></div>`;
+  }
+
+  function renderUpload() {
+    return `<div class="page-title"><div><h2>Upload File Presensi</h2><p>${esc(periodLabel(state.period))} · Mendukung banyak file .xlsx/.xls sekaligus.</p></div></div>
+      <div class="card card-pad"><div id="dropzone" class="dropzone"><div class="drop-icon">⇧</div><h3>Tarik dan letakkan file presensi di sini</h3><p>atau pilih file dari komputer.</p><div style="margin-top:14px"><button class="btn btn-secondary btn-sm" data-action="choose-files">Pilih File</button></div><input class="file-input" id="file-input" type="file" multiple accept=".xlsx,.xls"></div>
+      ${state.files.length ? `<div class="section-gap table-wrap"><table class="file-table"><thead><tr><th>No.</th><th>Nama File</th><th>Ukuran</th><th>Status</th><th></th></tr></thead><tbody>${state.files.map((file,i)=>`<tr><td>${i+1}</td><td>${esc(file.name)}</td><td>${formatBytes(file.size)}</td><td><span class="status ok">● Siap</span></td><td class="text-right"><button class="btn btn-secondary btn-sm" data-remove-file="${i}">Hapus</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+      <div class="actions"><button class="btn btn-secondary" data-action="back-period">← Kembali</button><div class="actions-right">${state.files.length ? '<button class="btn btn-secondary" data-action="choose-files">＋ Tambah File</button><button class="btn btn-primary" data-action="validate">Validasi Data →</button>' : ''}</div></div></div>`;
+  }
+
+  function renderValidation() {
+    const v = state.validation || {results:[],errors:[],employees:[]};
+    const ok = v.results.filter(r=>r.ok).length;
+    const bad = v.results.length-ok;
+    return `<div class="page-title"><div><h2>Validasi Data Presensi</h2><p>Hasil pemeriksaan struktur file dan periode data.</p></div></div>
+      <div class="summary-cards"><div class="card summary-card"><div class="summary-icon">▤</div><div><div class="summary-value">${v.results.length}</div><div class="summary-label">File Diunggah</div></div></div><div class="card summary-card"><div class="summary-icon">✓</div><div><div class="summary-value">${ok}</div><div class="summary-label">Berhasil Dibaca</div></div></div><div class="card summary-card"><div class="summary-icon">!</div><div><div class="summary-value">${bad}</div><div class="summary-label">File Bermasalah</div></div></div></div>
+      <div class="section-gap ${bad ? 'alert alert-danger' : 'alert alert-success'}"><div class="alert-title">${bad ? 'Validasi belum dapat dilanjutkan' : 'Data siap diproses'}</div>${bad ? 'Perbaiki atau hapus file bermasalah, kemudian lakukan validasi ulang.' : `Periode data: ${esc(periodLabel(state.period))} · Pegawai ditemukan: ${v.employees.length} · File valid: ${ok}`}</div>
+      ${cfg.RULES.LATEST_OVERTIME_ARRIVAL_CONFIRMATION_REQUIRED ? '<div class="section-gap alert alert-warning"><div class="alert-title">Item aturan yang perlu dikonfirmasi</div>Source existing tidak konsisten untuk batas jam datang terakhir: komentar Main.gs menyebut 09:31, sedangkan konfigurasi Database.gs menetapkan 09:00. MVP ini memakai nilai konfigurasi 09:00 dan menandainya untuk konfirmasi.</div>' : ''}
+      <div class="section-gap card"><div class="table-wrap" style="border:0"><table class="file-table"><thead><tr><th>Nama File</th><th>Status</th><th>Keterangan</th></tr></thead><tbody>${v.results.map(r=>`<tr><td>${esc(r.fileName)}</td><td><span class="status ${r.ok?'ok':'error'}">${r.ok?'● Berhasil':'● Gagal'}</span></td><td>${esc(r.ok ? `Pegawai: ${r.employee}` : r.error)}</td></tr>`).join('')}</tbody></table></div></div>
+      <div class="actions"><button class="btn btn-secondary" data-action="back-upload">← Kembali</button>${bad ? '' : '<button class="btn btn-primary" data-action="process-data">Proses Data →</button>'}</div>`;
+  }
+
+  function renderProcessing() {
+    const labels = ['Membaca file','Mengidentifikasi pegawai','Memvalidasi periode','Menghitung jam lembur','Menyiapkan hasil review'];
+    return `<div class="page-title"><div><h2>Memproses Data Presensi</h2><p>Sistem menyiapkan data lembur untuk direview.</p></div></div><div class="card progress-wrap"><div class="progress-title"><h3>Memproses Data Presensi</h3><p>Jangan menutup halaman selama proses berlangsung.</p></div><div class="progress-bar"><div class="progress-fill" style="width:${state.processing.percent}%"></div></div><div class="progress-meta"><span>${state.processing.percent}%</span><span>${state.files.length} file</span></div><ul class="process-list">${labels.map((l,i)=>`<li class="${i<state.processing.active?'done':i===state.processing.active?'active':''}"><span class="process-bullet">${i<state.processing.active?'✓':i+1}</span>${l}</li>`).join('')}</ul></div>`;
+  }
+
+  function reviewRows() {
+    const rows = [];
+    state.employees.forEach((employee) => {
+      Object.keys(employee.records || {}).sort().forEach((key) => {
+        const record = employee.records[key];
+        if (!record || (Number(record.originalOvertimeHours || 0) <= 0 && Number(record.overtimeHours || 0) <= 0)) return;
+        rows.push({ employee, record, key });
+      });
+    });
+    return rows.filter(({employee,record}) => {
+      const q = state.filter.trim().toLowerCase();
+      if (!q) return true;
+      return employee.name.toLowerCase().includes(q) || rules.formatIndonesianDate(record.date,false).toLowerCase().includes(q);
+    });
+  }
+
+  function renderReview() {
+    const summary = rules.summarize(state.employees);
+    const rows = reviewRows();
+    return `<div class="page-title"><div><h2>Review Data Lembur</h2><p>${esc(periodLabel(state.period))} · Koreksi jam lembur sebelum dokumen dibuat.</p></div></div>
+      <div class="grid-4">${metric(summary.employees,'Pegawai')}${metric(summary.overtimeEmployees,'Pegawai Lembur')}${metric(summary.totalHours,'Total Jam Lembur')}${metric(summary.mealDays,'Hari Uang Makan')}</div>
+      <div class="toolbar"><div class="search"><input id="review-search" placeholder="Cari pegawai atau tanggal..." value="${esc(state.filter)}"></div><span style="font-size:11px;color:#6b7c93">${rows.length} baris lembur</span></div>
+      <div class="card table-wrap"><table class="data-table"><thead><tr><th>No.</th><th>Pegawai</th><th>Tanggal</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th><th>Jam Lembur</th></tr></thead><tbody>${rows.length ? rows.map((item,i)=>`<tr><td>${i+1}</td><td><button class="employee-link" data-employee-key="${esc(rules.employeeKey(item.employee))}">${esc(item.employee.name)}</button></td><td class="nowrap">${esc(rules.formatIndonesianDate(item.record.date,false))}</td><td>${rules.formatMinutes(item.record.inMinutes)}</td><td>${rules.formatMinutes(item.record.outMinutes)}</td><td>${esc(item.record.status || '-')}</td><td><select class="select-mini" data-overtime-key="${esc(rules.employeeKey(item.employee))}|${esc(item.key)}">${[0,1,2,3,4].map(v=>`<option value="${v}" ${Number(item.record.overtimeHours)===v?'selected':''}>${v} jam</option>`).join('')}</select></td></tr>`).join('') : '<tr><td colspan="7" class="text-center" style="padding:28px;color:#6b7c93">Tidak ada data lembur pada filter ini.</td></tr>'}</tbody></table></div>
+      <div class="footer-note">Perubahan pada kolom Jam Lembur menjadi nilai final untuk Rekapitulasi, Daftar Hadir, dan SPKL.</div>
+      <div class="actions"><button class="btn btn-secondary" data-action="back-validation">← Kembali</button><button class="btn btn-primary" data-action="to-confirm">Konfirmasi & Lanjut →</button></div>`;
+  }
+
+  function renderConfirm() {
+    const s = rules.summarize(state.employees);
+    return `<div class="page-title"><div><h2>Siap Membuat Dokumen</h2><p>Periksa ringkasan sebelum file Excel dibuat.</p></div></div><div class="card card-pad">
+      <div class="two-col"><div><div class="card-title">Ringkasan Proses</div><div class="detail-grid section-gap"><div><div class="detail-label">Periode</div><div class="detail-value">${esc(periodLabel(state.period))}</div></div><div><div class="detail-label">Jumlah Pegawai</div><div class="detail-value">${s.employees}</div></div><div><div class="detail-label">Pegawai Lembur</div><div class="detail-value">${s.overtimeEmployees}</div></div><div><div class="detail-label">Total Lembur</div><div class="detail-value">${s.totalHours} jam</div></div><div><div class="detail-label">Hari Uang Makan</div><div class="detail-value">${s.mealDays} hari</div></div></div></div>
+      <div><div class="card-title">Dokumen yang akan dibuat</div><ul class="confirm-list section-gap"><li><span class="check">☑</span>Rekapitulasi Lembur</li><li><span class="check">☑</span>Daftar Hadir Kerja Lembur</li><li><span class="check">☑</span>SPKL Hari Kerja</li><li><span class="check">☑</span>SPKL Weekend</li></ul><div class="card-subtitle">SPKL Hari Kerja dan WEEKEND berada dalam satu workbook Excel.</div></div></div>
+      <div class="actions"><button class="btn btn-secondary" data-action="back-review">← Kembali ke Review</button><button class="btn btn-primary" data-action="generate" ${state.busy?'disabled':''}>${state.busy?'Membuat Dokumen...':'Generate Dokumen'}</button></div></div>`;
+  }
+
+  function renderResult() {
+    const run = state.currentRun;
+    const period = run?.period || state.period;
+    const summary = run?.summary || rules.summarize(run?.employees || state.employees);
+    return `<div class="card result-hero"><div class="success-mark">✓</div><h3>${state.resultFromHistory ? 'Hasil Proses Tersimpan' : 'Dokumen Berhasil Dibuat'}</h3><p>${esc(periodLabel(period))}${run?.processedAt ? ` · ${esc(formatDateTime(run.processedAt))}` : ''}</p>
+      <div class="grid-4 section-gap" style="text-align:left">${metric(summary.employees,'Pegawai')}${metric(summary.overtimeEmployees,'Pegawai Lembur')}${metric(summary.totalHours,'Total Jam Lembur')}${metric(summary.mealDays,'Hari Uang Makan')}</div>
+      <div class="download-list"><div class="download-row"><div class="file-icon">▤</div><div><div class="download-name">Rekapitulasi Lembur</div><div class="download-meta">${esc(periodLabel(period))}</div></div><button class="btn btn-secondary btn-sm" data-download="recap">Download</button></div><div class="download-row"><div class="file-icon">▦</div><div><div class="download-name">Daftar Hadir Kerja Lembur</div><div class="download-meta">Workbook dengan selector tanggal</div></div><button class="btn btn-secondary btn-sm" data-download="daily">Download</button></div><div class="download-row"><div class="file-icon">▧</div><div><div class="download-name">SPKL ${esc(periodLabel(period))}.xlsx</div><div class="download-meta">Sheet Hari Kerja + WEEKEND</div></div><button class="btn btn-secondary btn-sm" data-download="spkl">Download</button></div></div>
+      <div class="actions"><button class="btn btn-secondary" data-action="go-dashboard">Kembali ke Dashboard</button><button class="btn btn-primary" data-action="new-period">Proses Periode Baru</button></div></div>`;
+  }
+
+  function renderHistory() {
+    const history = storage.listHistory();
+    const rows = history.map((item) => `<tr><td>${esc(periodLabel(item.period))}</td><td>${item.summary.employees}</td><td>${item.summary.totalHours} jam</td><td>${esc(formatDateTime(item.processedAt))}</td><td><span class="status-pill">Selesai</span></td><td><button class="btn btn-secondary btn-sm" data-history-id="${esc(item.id)}">Lihat</button></td></tr>`).join('');
+    const content = `<div class="page-title"><div><h2>Riwayat Proses</h2><p>Dokumen lembur yang pernah diproses pada browser ini.</p></div></div><div class="card table-wrap"><table class="data-table history-table"><thead><tr><th>Periode</th><th>Pegawai</th><th>Total Lembur</th><th>Diproses</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="text-center" style="padding:36px;color:#6b7c93">Belum ada riwayat.</td></tr>'}</tbody></table></div><div class="footer-note">Riwayat disimpan lokal pada browser ini dan tidak tersinkron antarperangkat.</div>`;
+    app.innerHTML = shell(content); bindEvents();
+  }
+
+  function renderDrawer() {
+    if (!state.drawerKey) return '';
+    const employee = state.employees.find(e=>rules.employeeKey(e)===state.drawerKey);
+    if (!employee) return '';
+    const records = Object.keys(employee.records || {}).sort().map(k=>({key:k,record:employee.records[k]})).filter(x=>Number(x.record.overtimeHours||0)>0);
+    const total = records.reduce((s,x)=>s+Number(x.record.overtimeHours||0),0);
+    return `<div class="drawer-backdrop" data-action="close-drawer"></div><aside class="drawer"><div class="drawer-header"><h3>Detail Pegawai</h3><button class="icon-btn" data-action="close-drawer">×</button></div><div class="profile"><div class="profile-avatar">◉</div><div><div class="profile-name">${esc(employee.name)}</div><div class="profile-meta">NIP ${esc(employee.nip || '-')}</div></div></div><div class="detail-grid"><div><div class="detail-label">Kode Satker</div><div class="detail-value">${esc(employee.satkerCode || '-')}</div></div><div><div class="detail-label">Total Lembur</div><div class="detail-value">${total} jam</div></div></div><div class="card-title">Data Lembur</div><div class="table-wrap section-gap"><table class="data-table"><thead><tr><th>Tanggal</th><th>Masuk</th><th>Pulang</th><th>Lembur</th></tr></thead><tbody>${records.map(x=>`<tr><td>${esc(rules.formatIndonesianDate(x.record.date,false))}</td><td>${rules.formatMinutes(x.record.inMinutes)}</td><td>${rules.formatMinutes(x.record.outMinutes)}</td><td>${x.record.overtimeHours} jam</td></tr>`).join('')}</tbody></table></div></aside>`;
+  }
+
+  function render() {
+    if (!state.session) return renderLogin();
+    if (state.view === 'dashboard') return renderDashboard();
+    if (state.view === 'history') return renderHistory();
+    return renderProcess();
+  }
+
+  function resetProcess() {
+    state.view = 'process'; state.processStep = 'period'; state.files = []; state.validation = null; state.employees = []; state.filter = ''; state.generated = null; state.currentRun = null; state.resultFromHistory = false; state.drawerKey = null;
+  }
+
+  function addFiles(fileList) {
+    const incoming = Array.from(fileList || []).filter(f=>/\.(xlsx|xls)$/i.test(f.name));
+    const existing = new Map(state.files.map(f=>[`${f.name}|${f.size}|${f.lastModified}`,f]));
+    incoming.forEach(f=>existing.set(`${f.name}|${f.size}|${f.lastModified}`,f));
+    state.files = [...existing.values()]; state.validation = null; render();
+  }
+
+  async function validateFiles() {
+    if (!state.files.length || state.busy) return;
+    state.busy = true;
+    try {
+      const result = await parser.parseFiles(state.files, state.period);
+      state.validation = result; state.processStep = 'validation';
+    } catch (error) {
+      alert(error.message || String(error));
+    } finally { state.busy = false; render(); }
+  }
+
+  async function processData() {
+    if (!state.validation || state.validation.errors.length) return;
+    state.processStep = 'processing'; state.processing = {percent:8,active:0}; render();
+    const stages = [20,38,58,78,92];
+    for (let i=0;i<stages.length;i+=1) {
+      state.processing = {percent:stages[i],active:i}; render(); await new Promise(r=>setTimeout(r,180));
+      if (i===1) await rules.assignSatkerCodes(state.validation.employees);
+    }
+    state.employees = state.validation.employees;
+    state.processing = {percent:100,active:5}; render(); await new Promise(r=>setTimeout(r,220));
+    state.processStep = 'review'; render();
+  }
+
+  function updateOvertime(key, value) {
+    const [employeeKey, dateKey] = key.split('|');
+    const employee = state.employees.find(e=>rules.employeeKey(e)===employeeKey);
+    if (!employee || !employee.records[dateKey]) return;
+    employee.records[dateKey].overtimeHours = Math.max(0,Math.min(4,Number(value)||0));
+    render();
+  }
+
+  async function generateDocs() {
+    if (state.busy) return;
+    state.busy = true; render();
+    try {
+      state.generated = await generator.generateAll(state.employees, state.period);
+      const run = { id:`${state.period.year}-${rules.pad2(state.period.month)}-${Date.now()}`, period:{...state.period}, processedAt:new Date().toISOString(), summary:rules.summarize(state.employees), employees:state.employees };
+      storage.saveRun(run); state.currentRun = run; state.resultFromHistory = false; state.processStep='result';
+    } catch (error) {
+      alert(`Gagal membuat dokumen: ${error.message || error}`);
+    } finally { state.busy=false; render(); }
+  }
+
+  async function download(kind) {
+    const run = state.currentRun || {period:state.period,employees:state.employees};
+    if (!run.employees?.length) return;
+    try {
+      let file = state.generated && state.generated[kind];
+      if (!file) {
+        if (kind==='recap') file = await generator.generateRecap(run.employees,run.period);
+        if (kind==='daily') file = await generator.generateDaily(run.employees,run.period);
+        if (kind==='spkl') file = await generator.generateSpkl(run.employees,run.period);
+      }
+      generator.downloadFile(file);
+    } catch (error) { alert(`Gagal menyiapkan file: ${error.message || error}`); }
+  }
+
+  function openHistory(id) {
+    const run = storage.getRun(id); if (!run) return;
+    state.view='process'; state.processStep='result'; state.period={...run.period}; state.employees=run.employees; state.currentRun=run; state.generated=null; state.resultFromHistory=true; render();
+  }
+
+  function demoLogin() {
+    storage.setSession({ name:'Pengguna Internal', email:'akun@pkp.go.id', mode:'demo' }); state.session=storage.getSession(); render();
+  }
+
+  function initGoogleLogin() {
+    if (!cfg.GOOGLE_CLIENT_ID) return demoLogin();
+    if (window.google?.accounts?.id) return requestGoogleCredential();
+    const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true; s.onload=requestGoogleCredential; s.onerror=()=>alert('Google Identity Services gagal dimuat.'); document.head.appendChild(s);
+  }
+
+  function requestGoogleCredential() {
+    google.accounts.id.initialize({client_id:cfg.GOOGLE_CLIENT_ID,callback:(response)=>{
+      try {
+        const payload=JSON.parse(decodeURIComponent(escape(atob(response.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))));
+        if (cfg.ALLOWED_GOOGLE_DOMAIN && payload.hd && payload.hd!==cfg.ALLOWED_GOOGLE_DOMAIN) throw new Error('Gunakan akun domain kedinasan yang diizinkan.');
+        storage.setSession({name:payload.name||payload.email,email:payload.email||'',picture:payload.picture||'',mode:'gis'}); state.session=storage.getSession(); render();
+      } catch(e) { alert(e.message||String(e)); }
+    }});
+    google.accounts.id.prompt();
+  }
+
+  function bindEvents() {
+    document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',()=>{ const target=btn.dataset.nav; if(target==='process') resetProcess(); else state.view=target; render(); }));
+    document.querySelector('[data-action="logout"]')?.addEventListener('click',()=>{ storage.clearSession(); state.session=null; render(); });
+    document.querySelector('[data-action="login"]')?.addEventListener('click',initGoogleLogin);
+    document.querySelector('[data-action="start-process"]')?.addEventListener('click',()=>{ resetProcess(); render(); });
+    document.querySelector('[data-action="period-next"]')?.addEventListener('click',()=>{ state.period.month=Number(document.getElementById('period-month').value); state.period.year=Number(document.getElementById('period-year').value); state.processStep='upload'; render(); });
+    document.querySelector('[data-action="back-period"]')?.addEventListener('click',()=>{ state.processStep='period'; render(); });
+    document.querySelectorAll('[data-action="choose-files"]').forEach(btn=>btn.addEventListener('click',()=>document.getElementById('file-input')?.click()));
+    document.getElementById('file-input')?.addEventListener('change',e=>addFiles(e.target.files));
+    const dz=document.getElementById('dropzone'); if(dz){ ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('dragover')})); ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('dragover')})); dz.addEventListener('drop',e=>addFiles(e.dataTransfer.files)); }
+    document.querySelectorAll('[data-remove-file]').forEach(btn=>btn.addEventListener('click',()=>{ state.files.splice(Number(btn.dataset.removeFile),1); state.validation=null; render(); }));
+    document.querySelector('[data-action="validate"]')?.addEventListener('click',validateFiles);
+    document.querySelector('[data-action="back-upload"]')?.addEventListener('click',()=>{state.processStep='upload';render();});
+    document.querySelector('[data-action="process-data"]')?.addEventListener('click',processData);
+    document.querySelector('[data-action="back-validation"]')?.addEventListener('click',()=>{state.processStep='validation';render();});
+    document.querySelector('[data-action="to-confirm"]')?.addEventListener('click',()=>{state.processStep='confirm';render();});
+    document.querySelector('[data-action="back-review"]')?.addEventListener('click',()=>{state.processStep='review';render();});
+    document.querySelector('[data-action="generate"]')?.addEventListener('click',generateDocs);
+    document.querySelector('[data-action="go-dashboard"]')?.addEventListener('click',()=>{state.view='dashboard';render();});
+    document.querySelector('[data-action="new-period"]')?.addEventListener('click',()=>{resetProcess();render();});
+    document.querySelectorAll('[data-history-id]').forEach(btn=>btn.addEventListener('click',()=>openHistory(btn.dataset.historyId)));
+    document.querySelectorAll('[data-download]').forEach(btn=>btn.addEventListener('click',()=>download(btn.dataset.download)));
+    document.querySelectorAll('[data-employee-key]').forEach(btn=>btn.addEventListener('click',()=>{state.drawerKey=btn.dataset.employeeKey;render();}));
+    document.querySelectorAll('[data-action="close-drawer"]').forEach(btn=>btn.addEventListener('click',()=>{state.drawerKey=null;render();}));
+    document.querySelectorAll('[data-overtime-key]').forEach(sel=>sel.addEventListener('change',()=>updateOvertime(sel.dataset.overtimeKey,sel.value)));
+    document.getElementById('review-search')?.addEventListener('input',e=>{state.filter=e.target.value; clearTimeout(window.__reviewTimer); window.__reviewTimer=setTimeout(render,180);});
+  }
+
+  render();
+})();
