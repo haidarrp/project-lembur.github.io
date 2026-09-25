@@ -125,28 +125,51 @@
     render();
   }
 
+  function icon(name) {
+    const icons = {
+      home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>',
+      process: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M5 18v3h14v-3"/></svg>',
+      history: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>',
+      plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+      arrowRight: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m14 7 5 5-5 5"/></svg>',
+      chevronRight: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
+      calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 9h16"/></svg>',
+      upload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m8 8 4-4 4 4"/><path d="M4 18v2h16v-2"/></svg>',
+      review: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h8"/><path d="m16 17 2 2 3-4"/></svg>',
+      fileCheck: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4"/><path d="m8 14 2 2 5-5"/></svg>',
+      users: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.8 19c.7-3 2.4-4.5 5.2-4.5S13.5 16 14.2 19"/><circle cx="17" cy="9" r="2.2"/><path d="M15.7 14.8c2.6-.1 4.1 1.3 4.5 4.2"/></svg>',
+      clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>',
+      timer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12"/><path d="M8 3v5l4 4 4-4V3"/><path d="M8 21v-5l4-4 4 4v5"/><path d="M6 21h12"/></svg>',
+      meal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7"/><path d="M3 3v5a2 2 0 0 0 4 0V3"/><path d="M5 10v11"/><path d="M15 3c3 2 4 5 4 8v10"/><path d="M15 3v10h4"/></svg>'
+    };
+    return icons[name] || icons.fileCheck;
+  }
+
   function shell(content) {
     const nav = [
-      ['dashboard', '⌂', 'Dashboard'],
-      ['process', '▣', 'Proses Lembur'],
-      ['history', '▤', 'Riwayat']
+      ['dashboard', 'home', 'Dashboard'],
+      ['process', 'process', 'Proses Lembur'],
+      ['history', 'history', 'Riwayat']
     ];
     const active = state.view === 'process' ? 'process' : state.view;
+    const viewLabel = state.view === 'dashboard' ? 'Dashboard' : state.view === 'history' ? 'Riwayat' : 'Proses Lembur';
     return `
       <div class="app-shell">
         <aside class="sidebar">
           <div class="sidebar-brand">
-            <img src="assets/img/mark.svg" alt="PKP">
-            <div><div class="sidebar-title">Generator<br>Dokumen Lembur</div><div class="sidebar-subtitle">Pusdatin PKP</div></div>
+            <img src="assets/img/logo-pkp.png" alt="Kementerian PKP">
           </div>
-          <nav class="nav">
-            ${nav.map(([id, icon, label]) => `<button class="nav-button ${active === id ? 'active' : ''}" data-nav="${id}"><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span></button>`).join('')}
+          <nav class="nav" aria-label="Navigasi utama">
+            ${nav.map(([id, iconName, label]) => `<button class="nav-button ${active === id ? 'active' : ''}" data-nav="${id}" type="button"><span class="nav-icon">${icon(iconName)}</span><span class="nav-label">${label}</span></button>`).join('')}
           </nav>
-          <div class="sidebar-footer">Pusat Data dan Informasi<br>Kementerian PKP</div>
+          <div class="sidebar-footer">
+            <div class="sidebar-avatar">PD</div>
+            <div class="sidebar-footer-copy"><strong>Pusdatin</strong>Kementerian PKP</div>
+          </div>
         </aside>
         <main class="main">
           <header class="topbar">
-            <div class="topbar-label">Pusat Data dan Informasi · Kementerian PKP</div>
+            <div class="topbar-label"><strong>Generator Dokumen Lembur</strong><span>/ ${viewLabel}</span></div>
           </header>
           <section class="content">${content}</section>
         </main>
@@ -158,21 +181,10 @@
   function renderWelcome() {
     app.innerHTML = `
       <section class="welcome-shell">
-        <div class="welcome-panel">
-          <div class="welcome-visual">
-            <div class="brand-block">
-              <div class="brand-row"><img class="brand-mark" src="assets/img/mark.svg" alt="PKP"><div><div class="brand-kicker">Kementerian Perumahan dan Kawasan Permukiman</div><div style="font-size:12px;color:#6b7c93;margin-top:3px">Pusat Data dan Informasi</div></div></div>
-              <h1>Generator Dokumen Lembur</h1><p>Pengolahan presensi, review lembur, dan pembuatan dokumen dalam satu alur.</p>
-            </div>
-            <div class="welcome-caption">File presensi diproses pada browser dan tidak dikirim ke server oleh aplikasi ini.</div>
-          </div>
-          <div class="welcome-card-wrap"><div class="welcome-card">
-            <div class="welcome-icon">▤</div>
-            <h2>Generator Dokumen Lembur</h2>
-            <p>Mulai pengolahan dokumen lembur pegawai Pusat Data dan Informasi.</p>
-            <button class="btn btn-primary btn-block welcome-start" type="button" data-action="enter-app">Mulai →</button>
-            <div class="demo-note">Riwayat proses disimpan secara lokal pada browser yang digunakan.</div>
-          </div></div>
+        <div class="welcome-minimal">
+          <img class="welcome-logo" src="assets/img/logo-pkp.png" alt="Kementerian Perumahan dan Kawasan Permukiman">
+          <h1 class="welcome-title">Generator Dokumen Lembur</h1>
+          <button class="welcome-start" type="button" data-action="enter-app">Mulai ${icon('arrowRight')}</button>
         </div>
       </section>`;
     bindEvents();
@@ -182,21 +194,77 @@
     const history = storage.listHistory();
     const latest = history[0];
     const summary = latest?.summary || { employees: 0, overtimeEmployees: 0, totalHours: 0, mealDays: 0 };
+    const recent = history.slice(0, 3);
+    const recentRows = recent.length
+      ? recent.map((item) => `<div class="dashboard-history-row">
+          <div><div class="history-period-name">${esc(periodLabel(item.period))}</div><div class="history-period-sub">Dokumen lembur</div></div>
+          <div>${Number(item.summary?.employees || 0)}</div>
+          <div>${Number(item.summary?.totalHours || 0)} jam</div>
+          <div>${esc(formatDateTime(item.updatedAt || item.processedAt))}</div>
+          <div><span class="status-pill">Selesai</span></div>
+          <button class="chev-btn" type="button" data-history-id="${esc(item.id)}" aria-label="Lihat ${esc(periodLabel(item.period))}">${icon('chevronRight')}</button>
+        </div>`).join('')
+      : '<div class="empty-state"><strong>Belum ada riwayat</strong>Proses pertama akan tampil di sini.</div>';
+
     const content = `
-      <div class="page-title"><div><h2>Dashboard</h2><p>Ringkasan pengolahan dokumen lembur pegawai.</p></div></div>
-      <div class="card hero-card"><div class="hero-icon">▤</div><div><h3>Proses Lembur Baru</h3><p>Upload file presensi pegawai, review hasil, lalu generate dokumen.</p></div><button class="btn btn-primary" data-action="start-process">＋ Proses Lembur</button></div>
-      <div class="section-gap card">
-        ${latest ? `<div class="recent-period"><div><div class="period-name">${esc(periodLabel(latest.period))}</div><div class="period-time">${latest.updatedAt ? 'Diperbarui' : 'Diproses'} ${esc(formatDateTime(latest.updatedAt || latest.processedAt))}</div></div><button class="btn btn-secondary btn-sm" data-history-id="${esc(latest.id)}">Lihat Hasil →</button></div>` : '<div class="empty-state"><strong>Belum ada proses tersimpan</strong>Riwayat pemrosesan akan tampil setelah dokumen pertama dibuat.</div>'}
+      <div class="page-head">
+        <div><h1>Dashboard</h1><div class="small">Ringkasan periode terakhir</div></div>
+        <button class="btn btn-primary" data-action="start-process" type="button">${icon('plus')} Proses Baru</button>
       </div>
-      <div class="grid-4 section-gap">
-        ${metric(summary.employees, 'Pegawai')}${metric(summary.overtimeEmployees, 'Pegawai Lembur')}${metric(summary.totalHours, 'Total Jam Lembur')}${metric(summary.mealDays, 'Hari Uang Makan')}
+
+      <div class="dashboard-metrics">
+        ${metric(summary.employees, 'Pegawai')}
+        ${metric(summary.overtimeEmployees, 'Pegawai Lembur')}
+        ${metric(summary.totalHours, 'Total Jam Lembur')}
+        ${metric(summary.mealDays, 'Hari Uang Makan')}
       </div>
-      <div class="footer-note">Riwayat MVP disimpan di localStorage browser. File presensi asli tidak disimpan setelah halaman ditutup.</div>`;
-    app.innerHTML = shell(content); bindEvents();
+
+      <div class="dashboard-grid">
+        <div class="card flow-card">
+          <div class="dashboard-card-head"><div class="card-title">Alur Proses</div><div class="dashboard-card-note">4 langkah</div></div>
+          <div class="process-flow">
+            <div class="flow-step"><div class="flow-step-icon">${icon('calendar')}</div><span>Periode</span></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step"><div class="flow-step-icon">${icon('upload')}</div><span>Upload</span></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step"><div class="flow-step-icon">${icon('review')}</div><span>Review</span></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step"><div class="flow-step-icon">${icon('fileCheck')}</div><span>Hasil</span></div>
+          </div>
+          <div class="flow-card-foot"><span>File diproses lokal di browser</span><button class="text-link-btn" data-action="start-process" type="button">Mulai proses ${icon('chevronRight')}</button></div>
+        </div>
+
+        <div class="card period-card">
+          <div class="dashboard-card-head"><div class="card-title">Periode Terakhir</div><div class="dashboard-card-note">${latest ? 'Selesai' : '—'}</div></div>
+          <div class="period-box">
+            <div class="period-label">Periode</div>
+            <div class="period-main">${latest ? esc(periodLabel(latest.period)) : 'Belum ada'}</div>
+            <div class="period-meta">
+              <div><div class="period-meta-value">${Number(summary.employees || 0)}</div><div class="period-meta-label">Pegawai</div></div>
+              <div><div class="period-meta-value">${Number(summary.totalHours || 0)} jam</div><div class="period-meta-label">Lembur</div></div>
+            </div>
+          </div>
+          <div class="period-actions">${latest ? `<button class="text-link-btn" data-history-id="${esc(latest.id)}" type="button">Lihat hasil ${icon('chevronRight')}</button>` : ''}</div>
+        </div>
+      </div>
+
+      <div class="card dashboard-history">
+        <div class="dashboard-history-head"><div class="card-title">Riwayat Terbaru</div>${history.length ? '<button class="text-link-btn" data-action="go-history" type="button">Lihat semua</button>' : ''}</div>
+        ${history.length ? '<div class="dashboard-history-cols"><div>Periode</div><div>Pegawai</div><div>Lembur</div><div>Diproses</div><div>Status</div><div></div></div>' : ''}
+        ${recentRows}
+      </div>`;
+    app.innerHTML = shell(content);
+    bindEvents();
   }
 
   function metric(value, label) {
-    return `<div class="card metric"><div class="metric-label">${esc(label)}</div><div class="metric-value">${Number(value || 0)}</div></div>`;
+    const meta = {
+      'Pegawai': { icon: 'users', suffix: '' },
+      'Pegawai Lembur': { icon: 'clock', suffix: '' },
+      'Total Jam Lembur': { icon: 'timer', suffix: 'jam' },
+      'Hari Uang Makan': { icon: 'meal', suffix: 'hari' }
+    }[label] || { icon: 'fileCheck', suffix: '' };
+    return `<div class="card metric"><div class="metric-top"><div class="metric-label">${esc(label)}</div><div class="metric-icon">${icon(meta.icon)}</div></div><div class="metric-value">${Number(value || 0)}${meta.suffix ? `<span class="metric-suffix">${meta.suffix}</span>` : ''}</div></div>`;
   }
 
   function stepper(active) {
@@ -519,6 +587,7 @@
     document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',()=>{ const target=btn.dataset.nav; if(target==='process') resetProcess(); else { state.view=target; state.editingHistoryId=null; } render(); }));
     document.querySelector('[data-action="enter-app"]')?.addEventListener('click',()=>{ state.started=true; state.view='dashboard'; render(); });
     document.querySelector('[data-action="start-process"]')?.addEventListener('click',()=>{ resetProcess(); render(); });
+    document.querySelector('[data-action="go-history"]')?.addEventListener('click',()=>{ state.view='history'; state.editingHistoryId=null; render(); });
 
     document.getElementById('period-month')?.addEventListener('change',(e)=>{ state.period.month=Number(e.target.value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; render(); });
     document.getElementById('period-year')?.addEventListener('change',(e)=>{ state.period.year=Number(e.target.value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; render(); });
