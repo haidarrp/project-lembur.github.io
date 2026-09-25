@@ -361,3 +361,5 @@ a{color:inherit}
   .holiday-form{align-items:stretch}.holiday-form input[type="date"],.holiday-form .btn{width:100%}
   .download-row{grid-template-columns:auto 1fr}.download-row .btn{grid-column:1/-1;width:100%}
 }
+
+.nav-button{text-decoration:none}

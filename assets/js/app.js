@@ -161,6 +161,7 @@
           </div>
           <nav class="nav" aria-label="Navigasi utama">
             ${nav.map(([id, iconName, label]) => `<button class="nav-button ${active === id ? 'active' : ''}" data-nav="${id}" type="button"><span class="nav-icon">${icon(iconName)}</span><span class="nav-label">${label}</span></button>`).join('')}
+            <a class="nav-button" href="tukin.html"><span class="nav-icon">${icon('fileCheck')}</span><span class="nav-label">Tunjangan Kinerja</span></a>
           </nav>
           <div class="sidebar-footer">
             <div class="sidebar-avatar">PD</div>
