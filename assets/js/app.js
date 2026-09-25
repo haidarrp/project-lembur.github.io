@@ -9,7 +9,7 @@
   const app = document.getElementById('app');
 
   const state = {
-    session: storage.getSession(),
+    started: false,
     view: 'dashboard',
     processStep: 'period',
     period: { month: new Date().getMonth() + 1, year: new Date().getFullYear() },
@@ -22,6 +22,9 @@
     generated: null,
     currentRun: null,
     resultFromHistory: false,
+    holidays: [],
+    editingHistoryId: null,
+    resultMode: 'new',
     busy: false
   };
 
@@ -52,9 +55,74 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  function userInitial() {
-    const name = state.session && state.session.name ? state.session.name : 'Pengguna';
-    return name.trim().charAt(0).toUpperCase() || 'P';
+  function periodDateBounds(period) {
+    const days = new Date(period.year, period.month, 0).getDate();
+    return {
+      min: `${period.year}-${rules.pad2(period.month)}-01`,
+      max: `${period.year}-${rules.pad2(period.month)}-${rules.pad2(days)}`
+    };
+  }
+
+  function holidayLabel(key) {
+    try {
+      return rules.formatIndonesianDate(rules.dateFromKey(key), true);
+    } catch (_) {
+      return key;
+    }
+  }
+
+  function renderHolidayManager() {
+    const bounds = periodDateBounds(state.period);
+    const holidays = rules.normalizeHolidays(state.holidays);
+    const chips = holidays.length
+      ? holidays.map((key) => `<span class="holiday-chip"><span>${esc(holidayLabel(key))}</span><button type="button" data-remove-holiday="${esc(key)}" aria-label="Hapus tanggal merah">x</button></span>`).join('')
+      : '<span class="holiday-empty">Belum ada tanggal merah tambahan.</span>';
+    return `<div class="holiday-box"><div class="holiday-head"><div><div class="card-title">Tanggal Merah</div><div class="card-subtitle">Tanggal yang ditambahkan diperlakukan seperti weekend untuk perhitungan lembur dan SPKL.</div></div></div><div class="holiday-form"><input id="holiday-date" type="date" min="${bounds.min}" max="${bounds.max}"><button class="btn btn-secondary btn-sm" type="button" data-action="add-holiday">+ Tambah Tanggal Merah</button></div><div class="holiday-list">${chips}</div></div>`;
+  }
+
+  function dateBelongsToPeriod(key, period) {
+    return String(key || '').startsWith(`${period.year}-${rules.pad2(period.month)}-`);
+  }
+
+  function recalculateDate(dateKey) {
+    state.employees.forEach((employee) => {
+      const record = employee.records && employee.records[dateKey];
+      if (!record) return;
+      const overtime = rules.calculateOvertime(record.date, record.inMinutes, record.outMinutes, record.status, state.holidays);
+      record.overtimeHours = overtime.hours;
+      record.originalOvertimeHours = overtime.hours;
+      record.normalEndMinutes = overtime.normalEndMinutes;
+      record.adjustedWorkEndMinutes = overtime.adjustedWorkEndMinutes;
+      record.overtimeStartMinutes = overtime.overtimeStartMinutes;
+      record.isHoliday = rules.isHoliday(record.date, state.holidays);
+    });
+    state.generated = null;
+  }
+
+  function addHoliday() {
+    const input = document.getElementById('holiday-date');
+    const key = String(input?.value || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+      alert('Pilih tanggal merah terlebih dahulu.');
+      return;
+    }
+    if (!dateBelongsToPeriod(key, state.period)) {
+      alert(`Tanggal merah harus berada pada periode ${periodLabel(state.period)}.`);
+      return;
+    }
+    const before = state.holidays.includes(key);
+    state.holidays = rules.normalizeHolidays([...state.holidays, key]);
+    if (!before) recalculateDate(key);
+    state.validation = state.employees.length ? state.validation : null;
+    render();
+  }
+
+  function removeHoliday(key) {
+    if (!state.holidays.includes(key)) return;
+    state.holidays = state.holidays.filter((item) => item !== key);
+    recalculateDate(key);
+    state.validation = state.employees.length ? state.validation : null;
+    render();
   }
 
   function shell(content) {
@@ -78,7 +146,7 @@
         </aside>
         <main class="main">
           <header class="topbar">
-            <div class="user-menu"><div class="avatar">${userInitial()}</div><div class="user-meta"><div>${esc(state.session?.name || 'Pengguna Internal')}</div><div class="user-email">${esc(state.session?.username ? '@' + state.session.username : 'akun lokal')}</div></div><button class="link-button" data-action="logout">Keluar</button></div>
+            <div class="topbar-label">Pusat Data dan Informasi · Kementerian PKP</div>
           </header>
           <section class="content">${content}</section>
         </main>
@@ -87,35 +155,23 @@
     `;
   }
 
-  function renderLogin() {
+  function renderWelcome() {
     app.innerHTML = `
-      <section class="login-shell">
-        <div class="login-panel">
-          <div class="login-visual">
+      <section class="welcome-shell">
+        <div class="welcome-panel">
+          <div class="welcome-visual">
             <div class="brand-block">
               <div class="brand-row"><img class="brand-mark" src="assets/img/mark.svg" alt="PKP"><div><div class="brand-kicker">Kementerian Perumahan dan Kawasan Permukiman</div><div style="font-size:12px;color:#6b7c93;margin-top:3px">Pusat Data dan Informasi</div></div></div>
               <h1>Generator Dokumen Lembur</h1><p>Pengolahan presensi, review lembur, dan pembuatan dokumen dalam satu alur.</p>
             </div>
-            <div class="login-caption">MVP internal · File presensi diproses pada browser dan tidak dikirim ke server oleh aplikasi ini.</div>
+            <div class="welcome-caption">File presensi diproses pada browser dan tidak dikirim ke server oleh aplikasi ini.</div>
           </div>
-          <div class="login-card-wrap"><div class="login-card">
-            <h2>Masuk ke Sistem</h2><p>Masukkan username dan password untuk mengakses Generator Dokumen Lembur.</p>
-            <form id="login-form" class="login-form" novalidate>
-              <div class="login-field">
-                <label for="login-username">Username</label>
-                <input id="login-username" name="username" type="text" autocomplete="username" spellcheck="false" placeholder="Masukkan username" required autofocus>
-              </div>
-              <div class="login-field">
-                <label for="login-password">Password</label>
-                <div class="password-wrap">
-                  <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Masukkan password" required>
-                  <button type="button" class="password-toggle" data-action="toggle-password" aria-label="Tampilkan password">Lihat</button>
-                </div>
-              </div>
-              <div id="login-error" class="login-error" role="alert" aria-live="polite"></div>
-              <button class="btn btn-primary btn-block" type="submit" data-action="login">Masuk</button>
-            </form>
-            <div class="demo-note">Login ini ditujukan untuk MVP GitHub Pages. Untuk penggunaan produksi internal, autentikasi perlu diverifikasi oleh backend.</div>
+          <div class="welcome-card-wrap"><div class="welcome-card">
+            <div class="welcome-icon">▤</div>
+            <h2>Generator Dokumen Lembur</h2>
+            <p>Mulai pengolahan dokumen lembur pegawai Pusat Data dan Informasi.</p>
+            <button class="btn btn-primary btn-block welcome-start" type="button" data-action="enter-app">Mulai →</button>
+            <div class="demo-note">Riwayat proses disimpan secara lokal pada browser yang digunakan.</div>
           </div></div>
         </div>
       </section>`;
@@ -130,7 +186,7 @@
       <div class="page-title"><div><h2>Dashboard</h2><p>Ringkasan pengolahan dokumen lembur pegawai.</p></div></div>
       <div class="card hero-card"><div class="hero-icon">▤</div><div><h3>Proses Lembur Baru</h3><p>Upload file presensi pegawai, review hasil, lalu generate dokumen.</p></div><button class="btn btn-primary" data-action="start-process">＋ Proses Lembur</button></div>
       <div class="section-gap card">
-        ${latest ? `<div class="recent-period"><div><div class="period-name">${esc(periodLabel(latest.period))}</div><div class="period-time">Diproses ${esc(formatDateTime(latest.processedAt))}</div></div><button class="btn btn-secondary btn-sm" data-history-id="${esc(latest.id)}">Lihat Hasil →</button></div>` : '<div class="empty-state"><strong>Belum ada proses tersimpan</strong>Riwayat pemrosesan akan tampil setelah dokumen pertama dibuat.</div>'}
+        ${latest ? `<div class="recent-period"><div><div class="period-name">${esc(periodLabel(latest.period))}</div><div class="period-time">${latest.updatedAt ? 'Diperbarui' : 'Diproses'} ${esc(formatDateTime(latest.updatedAt || latest.processedAt))}</div></div><button class="btn btn-secondary btn-sm" data-history-id="${esc(latest.id)}">Lihat Hasil →</button></div>` : '<div class="empty-state"><strong>Belum ada proses tersimpan</strong>Riwayat pemrosesan akan tampil setelah dokumen pertama dibuat.</div>'}
       </div>
       <div class="grid-4 section-gap">
         ${metric(summary.employees, 'Pegawai')}${metric(summary.overtimeEmployees, 'Pegawai Lembur')}${metric(summary.totalHours, 'Total Jam Lembur')}${metric(summary.mealDays, 'Hari Uang Makan')}
@@ -172,7 +228,8 @@
     return `<div class="page-title"><div><h2>Proses Lembur Baru</h2><p>Tentukan periode data presensi yang akan diproses.</p></div></div>
       <div class="card card-pad"><div class="card-title">Periode Lembur</div><div class="card-subtitle">Bulan dan tahun digunakan untuk memfilter data pada setiap file presensi.</div>
       <div class="form-grid section-gap"><div class="field"><label>Bulan</label><select id="period-month">${months}</select></div><div class="field"><label>Tahun</label><select id="period-year">${years}</select></div></div>
-      <div class="actions"><span></span><button class="btn btn-primary" data-action="period-next">Selanjutnya →</button></div></div>`;
+      ${renderHolidayManager()}
+      <div class="actions"><span></span><button class="btn btn-primary" data-action="period-next">Selanjutnya -></button></div></div>`;
   }
 
   function renderUpload() {
@@ -218,12 +275,18 @@
   function renderReview() {
     const summary = rules.summarize(state.employees);
     const rows = reviewRows();
-    return `<div class="page-title"><div><h2>Review Data Lembur</h2><p>${esc(periodLabel(state.period))} · Koreksi jam lembur sebelum dokumen dibuat.</p></div></div>
-      <div class="grid-4">${metric(summary.employees,'Pegawai')}${metric(summary.overtimeEmployees,'Pegawai Lembur')}${metric(summary.totalHours,'Total Jam Lembur')}${metric(summary.mealDays,'Hari Uang Makan')}</div>
+    const isEdit = Boolean(state.editingHistoryId);
+    const actions = isEdit
+      ? `<div class="actions"><button class="btn btn-secondary" data-action="cancel-history-edit"><- Kembali ke Riwayat</button><button class="btn btn-primary" data-action="save-history-edit" ${state.busy?'disabled':''}>${state.busy?'Menyimpan...':'Simpan & Generate Ulang'}</button></div>`
+      : `<div class="actions"><button class="btn btn-secondary" data-action="back-validation"><- Kembali</button><button class="btn btn-primary" data-action="to-confirm">Konfirmasi & Lanjut -></button></div>`;
+    return `<div class="page-title"><div><h2>${isEdit ? 'Edit Data Lembur' : 'Review Data Lembur'}</h2><p>${esc(periodLabel(state.period))} - Koreksi jam lembur dan tanggal merah sebelum dokumen dibuat.</p></div></div>
+      ${isEdit ? '<div class="alert alert-warning"><div class="alert-title">Mode edit riwayat</div>Perubahan akan mengganti data periode tersimpan yang sama dan dokumen akan dibuat ulang berdasarkan hasil edit terbaru.</div>' : ''}
+      <div class="grid-4 section-gap">${metric(summary.employees,'Pegawai')}${metric(summary.overtimeEmployees,'Pegawai Lembur')}${metric(summary.totalHours,'Total Jam Lembur')}${metric(summary.mealDays,'Hari Uang Makan')}</div>
+      ${renderHolidayManager()}
       <div class="toolbar"><div class="search"><input id="review-search" placeholder="Cari pegawai atau tanggal..." value="${esc(state.filter)}"></div><span style="font-size:11px;color:#6b7c93">${rows.length} baris lembur</span></div>
-      <div class="card table-wrap"><table class="data-table"><thead><tr><th>No.</th><th>Pegawai</th><th>Tanggal</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th><th>Jam Lembur</th></tr></thead><tbody>${rows.length ? rows.map((item,i)=>`<tr><td>${i+1}</td><td><button class="employee-link" data-employee-key="${esc(rules.employeeKey(item.employee))}">${esc(item.employee.name)}</button></td><td class="nowrap">${esc(rules.formatIndonesianDate(item.record.date,false))}</td><td>${rules.formatMinutes(item.record.inMinutes)}</td><td>${rules.formatMinutes(item.record.outMinutes)}</td><td>${esc(item.record.status || '-')}</td><td><select class="select-mini" data-overtime-key="${esc(rules.employeeKey(item.employee))}|${esc(item.key)}">${[0,1,2,3,4].map(v=>`<option value="${v}" ${Number(item.record.overtimeHours)===v?'selected':''}>${v} jam</option>`).join('')}</select></td></tr>`).join('') : '<tr><td colspan="7" class="text-center" style="padding:28px;color:#6b7c93">Tidak ada data lembur pada filter ini.</td></tr>'}</tbody></table></div>
-      <div class="footer-note">Perubahan pada kolom Jam Lembur menjadi nilai final untuk Rekapitulasi, Daftar Hadir, dan SPKL.</div>
-      <div class="actions"><button class="btn btn-secondary" data-action="back-validation">← Kembali</button><button class="btn btn-primary" data-action="to-confirm">Konfirmasi & Lanjut →</button></div>`;
+      <div class="card table-wrap"><table class="data-table"><thead><tr><th>No.</th><th>Pegawai</th><th>Tanggal</th><th>Kategori</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th><th>Jam Lembur</th></tr></thead><tbody>${rows.length ? rows.map((item,i)=>{ const holiday=rules.isHoliday(item.record.date,state.holidays); const weekend=rules.isWeekend(item.record.date); const category=holiday ? 'Tanggal merah' : weekend ? 'Weekend' : 'Hari kerja'; return `<tr><td>${i+1}</td><td><button class="employee-link" data-employee-key="${esc(rules.employeeKey(item.employee))}">${esc(item.employee.name)}</button></td><td class="nowrap">${esc(rules.formatIndonesianDate(item.record.date,false))}</td><td><span class="category-pill ${holiday || weekend ? 'rest-day' : ''}">${category}</span></td><td>${rules.formatMinutes(item.record.inMinutes)}</td><td>${rules.formatMinutes(item.record.outMinutes)}</td><td>${esc(item.record.status || '-')}</td><td><select class="select-mini" data-overtime-key="${esc(rules.employeeKey(item.employee))}|${esc(item.key)}">${[0,1,2,3,4].map(v=>`<option value="${v}" ${Number(item.record.overtimeHours)===v?'selected':''}>${v} jam</option>`).join('')}</select></td></tr>`; }).join('') : '<tr><td colspan="8" class="text-center" style="padding:28px;color:#6b7c93">Tidak ada data lembur pada filter ini.</td></tr>'}</tbody></table></div>
+      <div class="footer-note">Perubahan pada Jam Lembur menjadi nilai final. Tanggal merah menggunakan aturan perhitungan weekend dan ditempatkan pada SPKL WEEKEND.</div>
+      ${actions}`;
   }
 
   function renderConfirm() {
@@ -238,16 +301,21 @@
     const run = state.currentRun;
     const period = run?.period || state.period;
     const summary = run?.summary || rules.summarize(run?.employees || state.employees);
-    return `<div class="card result-hero"><div class="success-mark">✓</div><h3>${state.resultFromHistory ? 'Hasil Proses Tersimpan' : 'Dokumen Berhasil Dibuat'}</h3><p>${esc(periodLabel(period))}${run?.processedAt ? ` · ${esc(formatDateTime(run.processedAt))}` : ''}</p>
+    const holidays = rules.normalizeHolidays(run?.holidays || state.holidays);
+    const title = state.resultMode === 'updated' ? 'Perubahan Berhasil Disimpan' : state.resultMode === 'history' ? 'Hasil Proses Tersimpan' : 'Dokumen Berhasil Dibuat';
+    const timeValue = run?.updatedAt || run?.processedAt;
+    const timeLabel = run?.updatedAt ? 'Diperbarui' : 'Diproses';
+    return `<div class="card result-hero"><div class="success-mark">✓</div><h3>${title}</h3><p>${esc(periodLabel(period))}${timeValue ? ` - ${timeLabel} ${esc(formatDateTime(timeValue))}` : ''}</p>
       <div class="grid-4 section-gap" style="text-align:left">${metric(summary.employees,'Pegawai')}${metric(summary.overtimeEmployees,'Pegawai Lembur')}${metric(summary.totalHours,'Total Jam Lembur')}${metric(summary.mealDays,'Hari Uang Makan')}</div>
+      ${holidays.length ? `<div class="result-holidays"><strong>Tanggal merah:</strong> ${holidays.map((key)=>esc(holidayLabel(key))).join(', ')}</div>` : ''}
       <div class="download-list"><div class="download-row"><div class="file-icon">▤</div><div><div class="download-name">Rekapitulasi Lembur</div><div class="download-meta">${esc(periodLabel(period))}</div></div><button class="btn btn-secondary btn-sm" data-download="recap">Download</button></div><div class="download-row"><div class="file-icon">▦</div><div><div class="download-name">Daftar Hadir Kerja Lembur</div><div class="download-meta">Workbook dengan selector tanggal</div></div><button class="btn btn-secondary btn-sm" data-download="daily">Download</button></div><div class="download-row"><div class="file-icon">▧</div><div><div class="download-name">SPKL ${esc(periodLabel(period))}.xlsx</div><div class="download-meta">Sheet Hari Kerja + WEEKEND</div></div><button class="btn btn-secondary btn-sm" data-download="spkl">Download</button></div></div>
-      <div class="actions"><button class="btn btn-secondary" data-action="go-dashboard">Kembali ke Dashboard</button><button class="btn btn-primary" data-action="new-period">Proses Periode Baru</button></div></div>`;
+      <div class="actions"><button class="btn btn-secondary" data-action="go-dashboard">Kembali ke Dashboard</button><div class="actions-right">${run?.id ? '<button class="btn btn-secondary" data-action="edit-current-run">Edit Data</button>' : ''}<button class="btn btn-primary" data-action="new-period">Proses Periode Baru</button></div></div></div>`;
   }
 
   function renderHistory() {
     const history = storage.listHistory();
-    const rows = history.map((item) => `<tr><td>${esc(periodLabel(item.period))}</td><td>${item.summary.employees}</td><td>${item.summary.totalHours} jam</td><td>${esc(formatDateTime(item.processedAt))}</td><td><span class="status-pill">Selesai</span></td><td><button class="btn btn-secondary btn-sm" data-history-id="${esc(item.id)}">Lihat</button></td></tr>`).join('');
-    const content = `<div class="page-title"><div><h2>Riwayat Proses</h2><p>Dokumen lembur yang pernah diproses pada browser ini.</p></div></div><div class="card table-wrap"><table class="data-table history-table"><thead><tr><th>Periode</th><th>Pegawai</th><th>Total Lembur</th><th>Diproses</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="text-center" style="padding:36px;color:#6b7c93">Belum ada riwayat.</td></tr>'}</tbody></table></div><div class="footer-note">Riwayat disimpan lokal pada browser ini dan tidak tersinkron antarperangkat.</div>`;
+    const rows = history.map((item) => { const changedAt=item.updatedAt || item.processedAt; const changedLabel=item.updatedAt ? 'Diubah' : 'Diproses'; return `<tr><td>${esc(periodLabel(item.period))}</td><td>${item.summary.employees}</td><td>${item.summary.totalHours} jam</td><td>${(item.holidays || []).length}</td><td><span class="history-time-label">${changedLabel}</span><br>${esc(formatDateTime(changedAt))}</td><td><span class="status-pill">Selesai</span></td><td><div class="history-actions"><button class="btn btn-secondary btn-sm" data-history-id="${esc(item.id)}">Lihat</button><button class="btn btn-secondary btn-sm" data-edit-history-id="${esc(item.id)}">Edit</button><button class="btn btn-danger btn-sm" data-delete-history-id="${esc(item.id)}">Hapus</button></div></td></tr>`; }).join('');
+    const content = `<div class="page-title"><div><h2>Riwayat Proses</h2><p>Dokumen lembur yang pernah diproses pada browser ini. Data dapat dilihat, diedit, digenerate ulang, atau dihapus per periode.</p></div></div><div class="card table-wrap"><table class="data-table history-table"><thead><tr><th>Periode</th><th>Pegawai</th><th>Total Lembur</th><th>Tanggal Merah</th><th>Terakhir Diubah</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="text-center" style="padding:36px;color:#6b7c93">Belum ada riwayat.</td></tr>'}</tbody></table></div><div class="footer-note">Riwayat disimpan lokal pada browser ini dan tidak tersinkron antarperangkat. Penghapusan riwayat tidak dapat dibatalkan.</div>`;
     app.innerHTML = shell(content); bindEvents();
   }
 
@@ -261,14 +329,26 @@
   }
 
   function render() {
-    if (!state.session) return renderLogin();
+    if (!state.started) return renderWelcome();
     if (state.view === 'dashboard') return renderDashboard();
     if (state.view === 'history') return renderHistory();
     return renderProcess();
   }
 
   function resetProcess() {
-    state.view = 'process'; state.processStep = 'period'; state.files = []; state.validation = null; state.employees = []; state.filter = ''; state.generated = null; state.currentRun = null; state.resultFromHistory = false; state.drawerKey = null;
+    state.view = 'process';
+    state.processStep = 'period';
+    state.files = [];
+    state.validation = null;
+    state.employees = [];
+    state.filter = '';
+    state.generated = null;
+    state.currentRun = null;
+    state.resultFromHistory = false;
+    state.holidays = [];
+    state.editingHistoryId = null;
+    state.resultMode = 'new';
+    state.drawerKey = null;
   }
 
   function addFiles(fileList) {
@@ -282,7 +362,7 @@
     if (!state.files.length || state.busy) return;
     state.busy = true;
     try {
-      const result = await parser.parseFiles(state.files, state.period);
+      const result = await parser.parseFiles(state.files, state.period, state.holidays);
       state.validation = result; state.processStep = 'validation';
     } catch (error) {
       alert(error.message || String(error));
@@ -307,6 +387,7 @@
     const employee = state.employees.find(e=>rules.employeeKey(e)===employeeKey);
     if (!employee || !employee.records[dateKey]) return;
     employee.records[dateKey].overtimeHours = Math.max(0,Math.min(4,Number(value)||0));
+    state.generated = null;
     render();
   }
 
@@ -314,23 +395,50 @@
     if (state.busy) return;
     state.busy = true; render();
     try {
-      state.generated = await generator.generateAll(state.employees, state.period);
-      const run = { id:`${state.period.year}-${rules.pad2(state.period.month)}-${Date.now()}`, period:{...state.period}, processedAt:new Date().toISOString(), summary:rules.summarize(state.employees), employees:state.employees };
-      storage.saveRun(run); state.currentRun = run; state.resultFromHistory = false; state.processStep='result';
+      const holidays = rules.normalizeHolidays(state.holidays);
+      state.generated = await generator.generateAll(state.employees, state.period, holidays);
+      const now = new Date().toISOString();
+      const existing = state.editingHistoryId ? (state.currentRun || storage.getRun(state.editingHistoryId)) : null;
+      const run = state.editingHistoryId
+        ? {
+            id: state.editingHistoryId,
+            period: {...state.period},
+            processedAt: existing?.processedAt || now,
+            updatedAt: now,
+            summary: rules.summarize(state.employees),
+            employees: state.employees,
+            holidays
+          }
+        : {
+            id: `${state.period.year}-${rules.pad2(state.period.month)}-${Date.now()}`,
+            period: {...state.period},
+            processedAt: now,
+            updatedAt: null,
+            summary: rules.summarize(state.employees),
+            employees: state.employees,
+            holidays
+          };
+      storage.saveRun(run);
+      state.currentRun = run;
+      state.resultFromHistory = Boolean(state.editingHistoryId);
+      state.resultMode = state.editingHistoryId ? 'updated' : 'new';
+      state.editingHistoryId = null;
+      state.processStep = 'result';
     } catch (error) {
       alert(`Gagal membuat dokumen: ${error.message || error}`);
     } finally { state.busy=false; render(); }
   }
 
   async function download(kind) {
-    const run = state.currentRun || {period:state.period,employees:state.employees};
+    const run = state.currentRun || {period:state.period,employees:state.employees,holidays:state.holidays};
     if (!run.employees?.length) return;
     try {
       let file = state.generated && state.generated[kind];
+      const holidays = rules.normalizeHolidays(run.holidays || state.holidays);
       if (!file) {
-        if (kind==='recap') file = await generator.generateRecap(run.employees,run.period);
-        if (kind==='daily') file = await generator.generateDaily(run.employees,run.period);
-        if (kind==='spkl') file = await generator.generateSpkl(run.employees,run.period);
+        if (kind==='recap') file = await generator.generateRecap(run.employees,run.period,holidays);
+        if (kind==='daily') file = await generator.generateDaily(run.employees,run.period,holidays);
+        if (kind==='spkl') file = await generator.generateSpkl(run.employees,run.period,holidays);
       }
       generator.downloadFile(file);
     } catch (error) { alert(`Gagal menyiapkan file: ${error.message || error}`); }
@@ -338,77 +446,86 @@
 
   function openHistory(id) {
     const run = storage.getRun(id); if (!run) return;
-    state.view='process'; state.processStep='result'; state.period={...run.period}; state.employees=run.employees; state.currentRun=run; state.generated=null; state.resultFromHistory=true; render();
+    state.view='process';
+    state.processStep='result';
+    state.period={...run.period};
+    state.employees=run.employees;
+    state.holidays=rules.normalizeHolidays(run.holidays || []);
+    state.currentRun=run;
+    state.generated=null;
+    state.resultFromHistory=true;
+    state.editingHistoryId=null;
+    state.resultMode='history';
+    state.filter='';
+    state.drawerKey=null;
+    render();
   }
 
-  async function sha256Hex(value) {
-    const bytes = new TextEncoder().encode(String(value));
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  async function loginWithPassword(event) {
-    event?.preventDefault();
-    const usernameInput = document.getElementById('login-username');
-    const passwordInput = document.getElementById('login-password');
-    const errorEl = document.getElementById('login-error');
-    const submitButton = document.querySelector('[data-action="login"]');
-    const username = String(usernameInput?.value || '').trim();
-    const password = String(passwordInput?.value || '');
-
-    if (errorEl) errorEl.textContent = '';
-    if (!username || !password) {
-      if (errorEl) errorEl.textContent = 'Username dan password wajib diisi.';
+  function editHistory(id) {
+    const run = storage.getRun(id);
+    if (!run) {
+      alert('Riwayat tidak ditemukan atau sudah dihapus.');
       return;
     }
-
-    try {
-      if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Memeriksa...'; }
-      const passwordSha256 = await sha256Hex(password);
-      const account = (cfg.AUTH_USERS || []).find((item) =>
-        String(item.username || '').toLowerCase() === username.toLowerCase() &&
-        String(item.passwordSha256 || '').toLowerCase() === passwordSha256
-      );
-
-      if (!account) {
-        if (errorEl) errorEl.textContent = 'Username atau password tidak sesuai.';
-        if (passwordInput) { passwordInput.value = ''; passwordInput.focus(); }
-        return;
-      }
-
-      storage.setSession({
-        name: account.displayName || account.username,
-        username: account.username,
-        mode: 'local-password'
-      });
-      state.session = storage.getSession();
-      render();
-    } catch (error) {
-      if (errorEl) errorEl.textContent = 'Login gagal diproses pada browser ini.';
-    } finally {
-      const currentButton = document.querySelector('[data-action="login"]');
-      if (currentButton) { currentButton.disabled = false; currentButton.textContent = 'Masuk'; }
-    }
+    state.view='process';
+    state.processStep='review';
+    state.period={...run.period};
+    state.employees=run.employees;
+    state.holidays=rules.normalizeHolidays(run.holidays || []);
+    state.currentRun=run;
+    state.generated=null;
+    state.resultFromHistory=true;
+    state.editingHistoryId=run.id;
+    state.resultMode='history';
+    state.filter='';
+    state.drawerKey=null;
+    render();
   }
 
-  function togglePasswordVisibility() {
-    const input = document.getElementById('login-password');
-    const button = document.querySelector('[data-action="toggle-password"]');
-    if (!input || !button) return;
-    const showing = input.type === 'text';
-    input.type = showing ? 'password' : 'text';
-    button.textContent = showing ? 'Lihat' : 'Sembunyikan';
-    button.setAttribute('aria-label', showing ? 'Tampilkan password' : 'Sembunyikan password');
-    input.focus();
+  function cancelHistoryEdit() {
+    state.editingHistoryId = null;
+    state.currentRun = null;
+    state.generated = null;
+    state.employees = [];
+    state.holidays = [];
+    state.filter = '';
+    state.drawerKey = null;
+    state.view = 'history';
+    render();
+  }
+
+  function deleteHistory(id) {
+    const run = storage.getRun(id);
+    if (!run) {
+      alert('Riwayat tidak ditemukan atau sudah dihapus.');
+      render();
+      return;
+    }
+    const label = periodLabel(run.period);
+    const approved = window.confirm(`Hapus riwayat proses ${label}?\n\nData hasil proses periode ini akan dihapus dari browser dan tindakan ini tidak dapat dibatalkan.`);
+    if (!approved) return;
+    storage.deleteRun(id);
+    if (state.currentRun?.id === id) {
+      state.currentRun = null;
+      state.generated = null;
+      state.resultFromHistory = false;
+      state.editingHistoryId = null;
+      state.holidays = [];
+    }
+    render();
   }
 
   function bindEvents() {
-    document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',()=>{ const target=btn.dataset.nav; if(target==='process') resetProcess(); else state.view=target; render(); }));
-    document.querySelector('[data-action="logout"]')?.addEventListener('click',()=>{ storage.clearSession(); state.session=null; render(); });
-    document.getElementById('login-form')?.addEventListener('submit', loginWithPassword);
-    document.querySelector('[data-action="toggle-password"]')?.addEventListener('click', togglePasswordVisibility);
+    document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',()=>{ const target=btn.dataset.nav; if(target==='process') resetProcess(); else { state.view=target; state.editingHistoryId=null; } render(); }));
+    document.querySelector('[data-action="enter-app"]')?.addEventListener('click',()=>{ state.started=true; state.view='dashboard'; render(); });
     document.querySelector('[data-action="start-process"]')?.addEventListener('click',()=>{ resetProcess(); render(); });
-    document.querySelector('[data-action="period-next"]')?.addEventListener('click',()=>{ state.period.month=Number(document.getElementById('period-month').value); state.period.year=Number(document.getElementById('period-year').value); state.processStep='upload'; render(); });
+
+    document.getElementById('period-month')?.addEventListener('change',(e)=>{ state.period.month=Number(e.target.value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; render(); });
+    document.getElementById('period-year')?.addEventListener('change',(e)=>{ state.period.year=Number(e.target.value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; render(); });
+    document.querySelector('[data-action="period-next"]')?.addEventListener('click',()=>{ state.period.month=Number(document.getElementById('period-month').value); state.period.year=Number(document.getElementById('period-year').value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; state.processStep='upload'; render(); });
+    document.querySelector('[data-action="add-holiday"]')?.addEventListener('click',addHoliday);
+    document.querySelectorAll('[data-remove-holiday]').forEach(btn=>btn.addEventListener('click',()=>removeHoliday(btn.dataset.removeHoliday)));
+
     document.querySelector('[data-action="back-period"]')?.addEventListener('click',()=>{ state.processStep='period'; render(); });
     document.querySelectorAll('[data-action="choose-files"]').forEach(btn=>btn.addEventListener('click',()=>document.getElementById('file-input')?.click()));
     document.getElementById('file-input')?.addEventListener('change',e=>addFiles(e.target.files));
@@ -421,9 +538,14 @@
     document.querySelector('[data-action="to-confirm"]')?.addEventListener('click',()=>{state.processStep='confirm';render();});
     document.querySelector('[data-action="back-review"]')?.addEventListener('click',()=>{state.processStep='review';render();});
     document.querySelector('[data-action="generate"]')?.addEventListener('click',generateDocs);
-    document.querySelector('[data-action="go-dashboard"]')?.addEventListener('click',()=>{state.view='dashboard';render();});
+    document.querySelector('[data-action="save-history-edit"]')?.addEventListener('click',generateDocs);
+    document.querySelector('[data-action="cancel-history-edit"]')?.addEventListener('click',cancelHistoryEdit);
+    document.querySelector('[data-action="go-dashboard"]')?.addEventListener('click',()=>{state.view='dashboard'; state.editingHistoryId=null; render();});
     document.querySelector('[data-action="new-period"]')?.addEventListener('click',()=>{resetProcess();render();});
+    document.querySelector('[data-action="edit-current-run"]')?.addEventListener('click',()=>{ if(state.currentRun?.id) editHistory(state.currentRun.id); });
     document.querySelectorAll('[data-history-id]').forEach(btn=>btn.addEventListener('click',()=>openHistory(btn.dataset.historyId)));
+    document.querySelectorAll('[data-edit-history-id]').forEach(btn=>btn.addEventListener('click',()=>editHistory(btn.dataset.editHistoryId)));
+    document.querySelectorAll('[data-delete-history-id]').forEach(btn=>btn.addEventListener('click',()=>deleteHistory(btn.dataset.deleteHistoryId)));
     document.querySelectorAll('[data-download]').forEach(btn=>btn.addEventListener('click',()=>download(btn.dataset.download)));
     document.querySelectorAll('[data-employee-key]').forEach(btn=>btn.addEventListener('click',()=>{state.drawerKey=btn.dataset.employeeKey;render();}));
     document.querySelectorAll('[data-action="close-drawer"]').forEach(btn=>btn.addEventListener('click',()=>{state.drawerKey=null;render();}));

@@ -74,7 +74,7 @@
     px.forEach((value, index) => { ws.getColumn(index + 1).width = Math.max(3, value / 7); });
   }
 
-  function buildRecapSheet(ws, employees, period) {
+  function buildRecapSheet(ws, employees, period, holidays) {
     const firstEmployeeRow = 8;
     const lastEmployeeRow = firstEmployeeRow + employees.length - 1;
     const totalRow = lastEmployeeRow + 1;
@@ -140,7 +140,7 @@
 
     for (let day = 1; day <= daysInMonth; day += 1) {
       const date = new Date(period.year, period.month - 1, day, 12, 0, 0);
-      if (rules.isWeekend(date)) {
+      if (rules.isWeekendLike(date, holidays)) {
         const column = 5 + day;
         for (let row = 7; row <= lastEmployeeRow; row += 1) setFill(ws.getCell(row, column), 'FFE7E6E6');
       }
@@ -360,20 +360,20 @@
     for (let col = 1; col <= 5; col += 1) ws.getCell(6, col).border = { bottom: { style: 'medium', color: { argb: 'FF000000' } } };
   }
 
-  function collectSpklGroups(employees, weekendOnly) {
+  function collectSpklGroups(employees, weekendOnly, holidays) {
     const groups = [];
     employees.forEach((employee) => {
       const records = Object.keys(employee.records || {}).sort().map((key) => employee.records[key]).filter((record) => {
         if (!record || Number(record.overtimeHours || 0) <= 0) return false;
-        return weekendOnly ? rules.isWeekend(record.date) : !rules.isWeekend(record.date);
+        return weekendOnly ? rules.isWeekendLike(record.date, holidays) : !rules.isWeekendLike(record.date, holidays);
       });
       if (records.length) groups.push({ employee, records });
     });
     return groups;
   }
 
-  function buildSpklSheet(ws, employees, period, weekendOnly) {
-    const groups = collectSpklGroups(employees, weekendOnly);
+  function buildSpklSheet(ws, employees, period, weekendOnly, holidays) {
+    const groups = collectSpklGroups(employees, weekendOnly, holidays);
     const dataStartRow = 14;
     const dataRowCount = groups.reduce((sum, group) => sum + group.records.length, 0);
     const monthUpper = cfg.INDONESIAN_MONTHS[period.month - 1].toUpperCase();
@@ -452,13 +452,13 @@
     };
   }
 
-  async function generateRecap(employees, period) {
+  async function generateRecap(employees, period, holidays) {
     const workbook = newWorkbook();
-    buildRecapSheet(workbook.addWorksheet('Rekap'), employees, period);
+    buildRecapSheet(workbook.addWorksheet('Rekap'), employees, period, holidays);
     return workbookToFile(workbook, `${cfg.OUTPUT.RECAP_PREFIX} - ${monthLabel(period)}.xlsx`);
   }
 
-  async function generateDaily(employees, period) {
+  async function generateDaily(employees, period, holidays) {
     const workbook = newWorkbook();
     const daily = workbook.addWorksheet('Daftar Hadir Harian');
     const database = workbook.addWorksheet('Database');
@@ -467,20 +467,20 @@
     return workbookToFile(workbook, `${cfg.OUTPUT.DAILY_PREFIX} - ${monthLabel(period)}.xlsx`);
   }
 
-  async function generateSpkl(employees, period) {
+  async function generateSpkl(employees, period, holidays) {
     const workbook = newWorkbook();
     const weekday = workbook.addWorksheet('SPKL');
     const weekend = workbook.addWorksheet('SPKL WEEKEND');
-    buildSpklSheet(weekday, employees, period, false);
-    buildSpklSheet(weekend, employees, period, true);
+    buildSpklSheet(weekday, employees, period, false, holidays);
+    buildSpklSheet(weekend, employees, period, true, holidays);
     return workbookToFile(workbook, `${cfg.OUTPUT.SPKL_PREFIX} ${monthLabel(period)}.xlsx`);
   }
 
-  async function generateAll(employees, period) {
+  async function generateAll(employees, period, holidays) {
     const [recap, daily, spkl] = await Promise.all([
-      generateRecap(employees, period),
-      generateDaily(employees, period),
-      generateSpkl(employees, period)
+      generateRecap(employees, period, holidays),
+      generateDaily(employees, period, holidays),
+      generateSpkl(employees, period, holidays)
     ]);
     return { recap, daily, spkl };
   }

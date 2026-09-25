@@ -29,10 +29,26 @@
     return day === 0 || day === 6;
   }
 
-  function calculateOvertime(date, inMinutes, outMinutes, status) {
+  function normalizeHolidays(holidays) {
+    if (!holidays) return [];
+    const values = holidays instanceof Set ? [...holidays] : Array.isArray(holidays) ? holidays : [];
+    return [...new Set(values.map((value) => String(value || '').trim()).filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)))].sort();
+  }
+
+  function isHoliday(date, holidays) {
+    const key = dateKey(date);
+    if (holidays instanceof Set) return holidays.has(key);
+    return Array.isArray(holidays) && holidays.includes(key);
+  }
+
+  function isWeekendLike(date, holidays) {
+    return isWeekend(date) || isHoliday(date, holidays);
+  }
+
+  function calculateOvertime(date, inMinutes, outMinutes, status, holidays) {
     const r = cfg.RULES;
     const day = date.getDay();
-    const weekend = isWeekend(date);
+    const weekend = isWeekendLike(date, holidays);
     const statusUpper = String(status || '').trim().toUpperCase();
     const normalEnd = day === 5 ? r.NORMAL_END_FRIDAY_MINUTES : r.NORMAL_END_MON_THU_MINUTES;
 
@@ -214,6 +230,9 @@
     dateFromKey,
     employeeKey,
     isWeekend,
+    normalizeHolidays,
+    isHoliday,
+    isWeekendLike,
     calculateOvertime,
     summarize,
     collectOvertimeRows,

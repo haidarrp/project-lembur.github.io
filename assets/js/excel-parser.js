@@ -134,7 +134,7 @@
     return { sheet, raw, display };
   }
 
-  async function parseAttendanceFile(file, period) {
+  async function parseAttendanceFile(file, period, holidays) {
     if (!window.XLSX) throw new Error('Library parser Excel belum termuat. Muat ulang halaman.');
     const ext = String(file.name || '').split('.').pop().toLowerCase();
     if (!['xlsx', 'xls'].includes(ext)) throw new Error('Format file harus .xlsx atau .xls.');
@@ -170,7 +170,7 @@
       const inMinutes = parseTimeMinutes(rawRow[columns.inTime], displayRow[columns.inTime]);
       const outMinutes = parseTimeMinutes(rawRow[columns.outTime], displayRow[columns.outTime]);
       const status = String(displayRow[columns.status] || '').trim();
-      const overtime = rules.calculateOvertime(date, inMinutes, outMinutes, status);
+      const overtime = rules.calculateOvertime(date, inMinutes, outMinutes, status, holidays);
       const key = rules.dateKey(date);
       const record = {
         date,
@@ -182,6 +182,7 @@
         normalEndMinutes: overtime.normalEndMinutes,
         adjustedWorkEndMinutes: overtime.adjustedWorkEndMinutes,
         overtimeStartMinutes: overtime.overtimeStartMinutes,
+        isHoliday: rules.isHoliday(date, holidays),
         sourceFileName: file.name
       };
 
@@ -211,7 +212,12 @@
     if (!target.name && source.name) target.name = source.name;
   }
 
-  async function parseFiles(files, period, onProgress) {
+  async function parseFiles(files, period, holidays, onProgress) {
+    if (typeof holidays === 'function') {
+      onProgress = holidays;
+      holidays = [];
+    }
+    holidays = rules.normalizeHolidays(holidays || []);
     const employeesByKey = new Map();
     const results = [];
     const errors = [];
@@ -221,7 +227,7 @@
       const file = fileList[index];
       if (onProgress) onProgress({ index, total: fileList.length, file, stage: 'reading' });
       try {
-        const employee = await parseAttendanceFile(file, period);
+        const employee = await parseAttendanceFile(file, period, holidays);
         const key = rules.employeeKey(employee);
         if (!employeesByKey.has(key)) employeesByKey.set(key, employee);
         else mergeEmployeeRecords(employeesByKey.get(key), employee);
