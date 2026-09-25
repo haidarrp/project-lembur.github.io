@@ -453,8 +453,16 @@
   }
 
   async function generateRecap(employees, period, holidays) {
+    const recapEmployees = (employees || []).filter((employee) => {
+      const totalOvertime = Object.values(employee.records || {}).reduce(
+        (sum, record) => sum + Number(record.overtimeHours || 0),
+        0
+      );
+      return totalOvertime > 0;
+    });
+
     const workbook = newWorkbook();
-    buildRecapSheet(workbook.addWorksheet('Rekap'), employees, period, holidays);
+    buildRecapSheet(workbook.addWorksheet('Rekap'), recapEmployees, period, holidays);
     return workbookToFile(workbook, `${cfg.OUTPUT.RECAP_PREFIX} - ${monthLabel(period)}.xlsx`);
   }
 

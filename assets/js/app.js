@@ -220,20 +220,6 @@
       </div>
 
       <div class="dashboard-grid">
-        <div class="card flow-card">
-          <div class="dashboard-card-head"><div class="card-title">Alur Proses</div><div class="dashboard-card-note">4 langkah</div></div>
-          <div class="process-flow">
-            <div class="flow-step"><div class="flow-step-icon">${icon('calendar')}</div><span>Periode</span></div>
-            <div class="flow-arrow"></div>
-            <div class="flow-step"><div class="flow-step-icon">${icon('upload')}</div><span>Upload</span></div>
-            <div class="flow-arrow"></div>
-            <div class="flow-step"><div class="flow-step-icon">${icon('review')}</div><span>Review</span></div>
-            <div class="flow-arrow"></div>
-            <div class="flow-step"><div class="flow-step-icon">${icon('fileCheck')}</div><span>Hasil</span></div>
-          </div>
-          <div class="flow-card-foot"><span>File diproses lokal di browser</span><button class="text-link-btn" data-action="start-process" type="button">Mulai proses ${icon('chevronRight')}</button></div>
-        </div>
-
         <div class="card period-card">
           <div class="dashboard-card-head"><div class="card-title">Periode Terakhir</div><div class="dashboard-card-note">${latest ? 'Selesai' : '—'}</div></div>
           <div class="period-box">
