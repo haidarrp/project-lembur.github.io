@@ -10,9 +10,7 @@ window.TUKIN_CONFIG = Object.freeze({
   UNIT_WORK: 'Pusat Data dan Informasi',
   UNIT_ORGANIZATION: 'Sekretariat Jenderal',
   UNIT_LABEL: 'Pusat Data dan Informasi, Sekretariat Jenderal',
-  TEMPLATE_URL: 'assets/templates/tukin-rekap-template.xlsx',
   DATA_START_ROW: 10,
-  TEMPLATE_DATA_ROWS: 36,
   RULES: Object.freeze({
     NORMAL_START_MINUTES: 7 * 60 + 30,
     NORMAL_END_MON_THU_MINUTES: 16 * 60,

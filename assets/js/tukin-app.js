@@ -115,41 +115,16 @@
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.tukin}</svg>`;
   }
 
-  function moduleNavigation() {
-    const tukinProcessActive = state.view === 'process';
-    const tukinHistoryActive = state.view === 'history';
-    return `<nav class="nav nav-modules" aria-label="Navigasi utama">
-      <a class="nav-button nav-home" href="index.html"><span class="nav-icon">${icon('home')}</span><span class="nav-label">Dashboard</span></a>
-      <div class="nav-group active-group">
-        <div class="nav-group-title"><span class="nav-icon">${icon('tukin')}</span><span class="nav-label">Tunjangan Kinerja</span></div>
-        <div class="nav-submenu">
-          <a class="nav-sub-button ${tukinProcessActive ? 'active' : ''}" href="tukin.html#process"><span class="nav-sub-dot"></span><span>Proses Tukin</span></a>
-          <a class="nav-sub-button ${tukinHistoryActive ? 'active' : ''}" href="tukin.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
-        </div>
-      </div>
-      <div class="nav-group">
-        <div class="nav-group-title"><span class="nav-icon">${icon('overtime')}</span><span class="nav-label">Lembur</span></div>
-        <div class="nav-submenu">
-          <a class="nav-sub-button" href="lembur.html#process"><span class="nav-sub-dot"></span><span>Proses Lembur</span></a>
-          <a class="nav-sub-button" href="lembur.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
-        </div>
-      </div>
-    </nav>`;
-  }
-
   function shell(content) {
-    const leaf = state.view === 'history' ? 'Riwayat' : 'Proses Tukin';
-    return `<div class="app-shell">
-      <aside class="sidebar">
-        <div class="sidebar-brand"><img src="assets/img/logo-pkp.png" alt="Kementerian PKP"></div>
-        ${moduleNavigation()}
-        <div class="sidebar-footer"><div class="sidebar-avatar">PD</div><div class="sidebar-footer-copy"><strong>Pusdatin</strong>Kementerian PKP</div></div>
-      </aside>
-      <main class="main">
-        <header class="topbar"><div class="topbar-label"><strong>Generator Dokumen</strong><span>/ Tunjangan Kinerja / ${leaf}</span></div></header>
-        <section class="content">${content}</section>
-      </main>
-    </div>${renderDrawer()}${renderEditModal()}${renderEmployeeModal()}${renderHistoryPreview()}`;
+    const view = state.view === 'history' ? 'history' : 'process';
+    const leaf = view === 'history' ? 'Riwayat' : 'Proses Tukin';
+    return window.AppShell.render({
+      module: 'tukin',
+      view,
+      viewLabel: leaf,
+      content,
+      overlays: `${renderDrawer()}${renderEditModal()}${renderEmployeeModal()}${renderHistoryPreview()}`
+    });
   }
 
   function stepper() {

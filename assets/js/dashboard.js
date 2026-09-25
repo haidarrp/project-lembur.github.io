@@ -54,38 +54,8 @@
     return new Date(run?.updatedAt || run?.processedAt || 0).getTime() || 0;
   }
 
-  function nav() {
-    return `<nav class="nav nav-modules" aria-label="Navigasi utama">
-      <a class="nav-button nav-home active" href="index.html"><span class="nav-icon">${icon('home')}</span><span class="nav-label">Dashboard</span></a>
-      <div class="nav-group">
-        <div class="nav-group-title"><span class="nav-icon">${icon('tukin')}</span><span class="nav-label">Tunjangan Kinerja</span></div>
-        <div class="nav-submenu">
-          <a class="nav-sub-button" href="tukin.html#process"><span class="nav-sub-dot"></span><span>Proses Tukin</span></a>
-          <a class="nav-sub-button" href="tukin.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
-        </div>
-      </div>
-      <div class="nav-group">
-        <div class="nav-group-title"><span class="nav-icon">${icon('overtime')}</span><span class="nav-label">Lembur</span></div>
-        <div class="nav-submenu">
-          <a class="nav-sub-button" href="lembur.html#process"><span class="nav-sub-dot"></span><span>Proses Lembur</span></a>
-          <a class="nav-sub-button" href="lembur.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
-        </div>
-      </div>
-    </nav>`;
-  }
-
   function shell(content) {
-    return `<div class="app-shell">
-      <aside class="sidebar">
-        <div class="sidebar-brand"><img src="assets/img/logo-pkp.png" alt="Kementerian PKP"></div>
-        ${nav()}
-        <div class="sidebar-footer"><div class="sidebar-avatar">PD</div><div class="sidebar-footer-copy"><strong>Pusdatin</strong>Kementerian PKP</div></div>
-      </aside>
-      <main class="main">
-        <header class="topbar"><div class="topbar-label"><strong>Generator Dokumen</strong><span>/ Dashboard</span></div></header>
-        <section class="content">${content}</section>
-      </main>
-    </div>`;
+    return window.AppShell.render({ module: 'dashboard', view: '', viewLabel: 'Dashboard', content });
   }
 
   function metric(label, value, note, iconName) {
