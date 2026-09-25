@@ -26,3 +26,6 @@
 .tukin-master-miss{background:var(--warning-soft)!important}
 @media(max-width:900px){.tukin-kpi{grid-template-columns:repeat(2,1fr)}.tukin-detail-summary{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:620px){.tukin-period-box,.tukin-form-grid,.tukin-result-grid{grid-template-columns:1fr}.tukin-date-row{display:block}.tukin-date-row .field{margin-bottom:10px}.tukin-kpi{grid-template-columns:1fr 1fr}.tukin-step-line{width:28px}.tukin-detail-summary{grid-template-columns:1fr 1fr}}
+.tukin-history-actions{flex-wrap:wrap;min-width:330px}
+.tukin-history-actions .btn{white-space:nowrap}
+@media(max-width:780px){.tukin-history-actions{min-width:0}.history-table{min-width:980px}}

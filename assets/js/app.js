@@ -146,22 +146,30 @@
   }
 
   function shell(content) {
-    const nav = [
-      ['dashboard', 'home', 'Dashboard'],
-      ['process', 'process', 'Proses Lembur'],
-      ['history', 'history', 'Riwayat']
-    ];
-    const active = state.view === 'process' ? 'process' : state.view;
-    const viewLabel = state.view === 'dashboard' ? 'Dashboard' : state.view === 'history' ? 'Riwayat' : 'Proses Lembur';
+    const lemburProcessActive = state.view === 'process';
+    const lemburHistoryActive = state.view === 'history';
+    const viewLabel = state.view === 'history' ? 'Riwayat' : state.view === 'dashboard' ? 'Dashboard' : 'Proses Lembur';
     return `
       <div class="app-shell">
         <aside class="sidebar">
           <div class="sidebar-brand">
             <img src="assets/img/logo-pkp.png" alt="Kementerian PKP">
           </div>
-          <nav class="nav" aria-label="Navigasi utama">
-            ${nav.map(([id, iconName, label]) => `<button class="nav-button ${active === id ? 'active' : ''}" data-nav="${id}" type="button"><span class="nav-icon">${icon(iconName)}</span><span class="nav-label">${label}</span></button>`).join('')}
-            <a class="nav-button" href="tukin.html"><span class="nav-icon">${icon('fileCheck')}</span><span class="nav-label">Tunjangan Kinerja</span></a>
+          <nav class="nav nav-modules" aria-label="Navigasi utama">
+            <div class="nav-group">
+              <div class="nav-group-title"><span class="nav-icon">${icon('fileCheck')}</span><span class="nav-label">Tunjangan Kinerja</span></div>
+              <div class="nav-submenu">
+                <a class="nav-sub-button" href="tukin.html#process"><span class="nav-sub-dot"></span><span>Proses Tukin</span></a>
+                <a class="nav-sub-button" href="tukin.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
+              </div>
+            </div>
+            <div class="nav-group active-group">
+              <div class="nav-group-title"><span class="nav-icon">${icon('clock')}</span><span class="nav-label">Lembur</span></div>
+              <div class="nav-submenu">
+                <a class="nav-sub-button ${lemburProcessActive ? 'active' : ''}" data-nav="process" href="index.html#process"><span class="nav-sub-dot"></span><span>Proses Lembur</span></a>
+                <a class="nav-sub-button ${lemburHistoryActive ? 'active' : ''}" data-nav="history" href="index.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
+              </div>
+            </div>
           </nav>
           <div class="sidebar-footer">
             <div class="sidebar-avatar">PD</div>
@@ -170,7 +178,7 @@
         </aside>
         <main class="main">
           <header class="topbar">
-            <div class="topbar-label"><strong>Generator Dokumen Lembur</strong><span>/ ${viewLabel}</span></div>
+            <div class="topbar-label"><strong>Generator Dokumen</strong><span>/ Lembur / ${viewLabel}</span></div>
           </header>
           <section class="content">${content}</section>
         </main>
@@ -364,13 +372,13 @@
       <div class="grid-4 section-gap" style="text-align:left">${metric(summary.employees,'Pegawai')}${metric(summary.overtimeEmployees,'Pegawai Lembur')}${metric(summary.totalHours,'Total Jam Lembur')}${metric(summary.mealDays,'Hari Uang Makan')}</div>
       ${holidays.length ? `<div class="result-holidays"><strong>Tanggal merah:</strong> ${holidays.map((key)=>esc(holidayLabel(key))).join(', ')}</div>` : ''}
       <div class="download-list"><div class="download-row"><div class="file-icon">▤</div><div><div class="download-name">Rekapitulasi Lembur</div><div class="download-meta">${esc(periodLabel(period))}</div></div><button class="btn btn-secondary btn-sm" data-download="recap">Download</button></div><div class="download-row"><div class="file-icon">▦</div><div><div class="download-name">Daftar Hadir Kerja Lembur</div><div class="download-meta">Workbook dengan selector tanggal</div></div><button class="btn btn-secondary btn-sm" data-download="daily">Download</button></div><div class="download-row"><div class="file-icon">▧</div><div><div class="download-name">SPKL ${esc(periodLabel(period))}.xlsx</div><div class="download-meta">Sheet Hari Kerja + WEEKEND</div></div><button class="btn btn-secondary btn-sm" data-download="spkl">Download</button></div></div>
-      <div class="actions"><button class="btn btn-secondary" data-action="go-dashboard">Kembali ke Dashboard</button><div class="actions-right">${run?.id ? '<button class="btn btn-secondary" data-action="edit-current-run">Edit Data</button>' : ''}<button class="btn btn-primary" data-action="new-period">Proses Periode Baru</button></div></div></div>`;
+      <div class="actions"><button class="btn btn-secondary" data-action="go-history">Lihat Riwayat</button><div class="actions-right">${run?.id ? '<button class="btn btn-secondary" data-action="edit-current-run">Edit Data</button>' : ''}<button class="btn btn-primary" data-action="new-period">Proses Periode Baru</button></div></div></div>`;
   }
 
   function renderHistory() {
     const history = storage.listHistory();
-    const rows = history.map((item) => { const changedAt=item.updatedAt || item.processedAt; const changedLabel=item.updatedAt ? 'Diubah' : 'Diproses'; return `<tr><td>${esc(periodLabel(item.period))}</td><td>${item.summary.employees}</td><td>${item.summary.totalHours} jam</td><td>${(item.holidays || []).length}</td><td><span class="history-time-label">${changedLabel}</span><br>${esc(formatDateTime(changedAt))}</td><td><span class="status-pill">Selesai</span></td><td><div class="history-actions"><button class="btn btn-secondary btn-sm" data-history-id="${esc(item.id)}">Lihat</button><button class="btn btn-secondary btn-sm" data-edit-history-id="${esc(item.id)}">Edit</button><button class="btn btn-danger btn-sm" data-delete-history-id="${esc(item.id)}">Hapus</button></div></td></tr>`; }).join('');
-    const content = `<div class="page-title"><div><h2>Riwayat Proses</h2><p>Dokumen lembur yang pernah diproses pada browser ini. Data dapat dilihat, diedit, digenerate ulang, atau dihapus per periode.</p></div></div><div class="card table-wrap"><table class="data-table history-table"><thead><tr><th>Periode</th><th>Pegawai</th><th>Total Lembur</th><th>Tanggal Merah</th><th>Terakhir Diubah</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="text-center" style="padding:36px;color:#6b7c93">Belum ada riwayat.</td></tr>'}</tbody></table></div><div class="footer-note">Riwayat disimpan lokal pada browser ini dan tidak tersinkron antarperangkat. Penghapusan riwayat tidak dapat dibatalkan.</div>`;
+    const rows = history.map((item) => { const changedAt=item.updatedAt || item.processedAt; const changedLabel=item.updatedAt ? 'Diubah' : 'Diproses'; return `<tr><td>${esc(periodLabel(item.period))}</td><td>${item.summary.employees}</td><td>${item.summary.totalHours} jam</td><td>${(item.holidays || []).length}</td><td><span class="history-time-label">${changedLabel}</span><br>${esc(formatDateTime(changedAt))}</td><td><span class="status-pill">Selesai</span></td><td><div class="history-actions"><button class="btn btn-secondary btn-sm" data-history-id="${esc(item.id)}">Lihat</button><button class="btn btn-secondary btn-sm" data-edit-history-id="${esc(item.id)}">Verifikasi/Edit</button><button class="btn btn-danger btn-sm" data-delete-history-id="${esc(item.id)}">Hapus</button></div></td></tr>`; }).join('');
+    const content = `<div class="page-title"><div><h2>Riwayat Lembur</h2><p>Dokumen lembur yang pernah diproses pada browser ini. Data dapat dilihat, diverifikasi/diedit, digenerate ulang melalui hasil tersimpan, atau dihapus per periode.</p></div></div><div class="card table-wrap"><table class="data-table history-table"><thead><tr><th>Periode</th><th>Pegawai</th><th>Total Lembur</th><th>Tanggal Merah</th><th>Terakhir Diubah</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="text-center" style="padding:36px;color:#6b7c93">Belum ada riwayat.</td></tr>'}</tbody></table></div><div class="footer-note">Riwayat disimpan lokal pada browser ini dan tidak tersinkron antarperangkat. Penghapusan riwayat tidak dapat dibatalkan.</div>`;
     app.innerHTML = shell(content); bindEvents();
   }
 
@@ -571,10 +579,10 @@
   }
 
   function bindEvents() {
-    document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',()=>{ const target=btn.dataset.nav; if(target==='process') resetProcess(); else { state.view=target; state.editingHistoryId=null; } render(); }));
-    document.querySelector('[data-action="enter-app"]')?.addEventListener('click',()=>{ state.started=true; state.view='dashboard'; render(); });
-    document.querySelector('[data-action="start-process"]')?.addEventListener('click',()=>{ resetProcess(); render(); });
-    document.querySelector('[data-action="go-history"]')?.addEventListener('click',()=>{ state.view='history'; state.editingHistoryId=null; render(); });
+    document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',(event)=>{ event.preventDefault(); const target=btn.dataset.nav; if(target==='process') resetProcess(); else { state.view=target; state.editingHistoryId=null; } history.replaceState(null,'',`index.html#${target}`); render(); }));
+    document.querySelector('[data-action="enter-app"]')?.addEventListener('click',()=>{ state.started=true; resetProcess(); history.replaceState(null,'','index.html#process'); render(); });
+    document.querySelector('[data-action="start-process"]')?.addEventListener('click',()=>{ resetProcess(); history.replaceState(null,'','index.html#process'); render(); });
+    document.querySelector('[data-action="go-history"]')?.addEventListener('click',()=>{ state.view='history'; state.editingHistoryId=null; history.replaceState(null,'','index.html#history'); render(); });
 
     document.getElementById('period-month')?.addEventListener('change',(e)=>{ state.period.month=Number(e.target.value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; render(); });
     document.getElementById('period-year')?.addEventListener('change',(e)=>{ state.period.year=Number(e.target.value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; render(); });
@@ -596,8 +604,8 @@
     document.querySelector('[data-action="generate"]')?.addEventListener('click',generateDocs);
     document.querySelector('[data-action="save-history-edit"]')?.addEventListener('click',generateDocs);
     document.querySelector('[data-action="cancel-history-edit"]')?.addEventListener('click',cancelHistoryEdit);
-    document.querySelector('[data-action="go-dashboard"]')?.addEventListener('click',()=>{state.view='dashboard'; state.editingHistoryId=null; render();});
-    document.querySelector('[data-action="new-period"]')?.addEventListener('click',()=>{resetProcess();render();});
+    document.querySelector('[data-action="go-dashboard"]')?.addEventListener('click',()=>{resetProcess(); history.replaceState(null,'','index.html#process'); render();});
+    document.querySelector('[data-action="new-period"]')?.addEventListener('click',()=>{resetProcess(); history.replaceState(null,'','index.html#process'); render();});
     document.querySelector('[data-action="edit-current-run"]')?.addEventListener('click',()=>{ if(state.currentRun?.id) editHistory(state.currentRun.id); });
     document.querySelectorAll('[data-history-id]').forEach(btn=>btn.addEventListener('click',()=>openHistory(btn.dataset.historyId)));
     document.querySelectorAll('[data-edit-history-id]').forEach(btn=>btn.addEventListener('click',()=>editHistory(btn.dataset.editHistoryId)));
@@ -609,5 +617,18 @@
     document.getElementById('review-search')?.addEventListener('input',e=>{state.filter=e.target.value; clearTimeout(window.__reviewTimer); window.__reviewTimer=setTimeout(render,180);});
   }
 
+  function applyHashRoute() {
+    const route = String(location.hash || '').replace(/^#/, '').toLowerCase();
+    if (route === 'history') { state.started = true; state.view = 'history'; state.editingHistoryId = null; }
+    else if (route === 'process') { state.started = true; resetProcess(); }
+  }
+
+  window.addEventListener('hashchange', () => {
+    const route = String(location.hash || '').replace(/^#/, '').toLowerCase();
+    if (route === 'history') { state.started = true; state.view = 'history'; state.editingHistoryId = null; render(); }
+    else if (route === 'process') { state.started = true; resetProcess(); render(); }
+  });
+
+  applyHashRoute();
   render();
 })();
