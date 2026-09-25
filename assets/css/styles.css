@@ -103,8 +103,22 @@ a{color:inherit}
   flex-direction:column;
   z-index:40;
 }
-.sidebar-brand{height:62px;display:flex;align-items:center;margin:0 7px 32px;overflow:hidden}
-.sidebar-brand img{display:block;width:188px;height:auto;max-height:54px;object-fit:contain;object-position:left center}
+.sidebar-brand{
+  height:62px;
+  display:flex;
+  align-items:center;
+  margin:0 7px 32px;
+  overflow:hidden;
+}
+.sidebar-brand img{
+  display:block;
+  width:100%;
+  max-width:188px;
+  height:auto;
+  max-height:54px;
+  object-fit:contain;
+  object-position:left center;
+}
 .nav{display:flex;flex-direction:column;gap:8px}
 .nav-button{
   height:48px;
