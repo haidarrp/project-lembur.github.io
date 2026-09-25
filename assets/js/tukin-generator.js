@@ -5,7 +5,7 @@
   const rules = window.TukinRules;
   const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   const BORDER_COLOR = 'FF000000';
-  const HEADER_FILL = 'FF5B9BD5';
+  const HEADER_FILL = 'FFDDEBF7';
   const MIN_DATA_ROWS = 36;
 
   function monthLabel(period) {
