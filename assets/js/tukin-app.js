@@ -109,7 +109,8 @@
       history: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/>',
       tukin: '<path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
       overtime: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8"/>',
-      chevron: '<path d="m9 18 6-6-6-6"/>'
+      chevron: '<path d="m9 18 6-6-6-6"/>',
+      home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/>'
     };
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.tukin}</svg>`;
   }
@@ -118,6 +119,7 @@
     const tukinProcessActive = state.view === 'process';
     const tukinHistoryActive = state.view === 'history';
     return `<nav class="nav nav-modules" aria-label="Navigasi utama">
+      <a class="nav-button nav-home" href="index.html"><span class="nav-icon">${icon('home')}</span><span class="nav-label">Dashboard</span></a>
       <div class="nav-group active-group">
         <div class="nav-group-title"><span class="nav-icon">${icon('tukin')}</span><span class="nav-label">Tunjangan Kinerja</span></div>
         <div class="nav-submenu">
@@ -128,8 +130,8 @@
       <div class="nav-group">
         <div class="nav-group-title"><span class="nav-icon">${icon('overtime')}</span><span class="nav-label">Lembur</span></div>
         <div class="nav-submenu">
-          <a class="nav-sub-button" href="index.html#process"><span class="nav-sub-dot"></span><span>Proses Lembur</span></a>
-          <a class="nav-sub-button" href="index.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
+          <a class="nav-sub-button" href="lembur.html#process"><span class="nav-sub-dot"></span><span>Proses Lembur</span></a>
+          <a class="nav-sub-button" href="lembur.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
         </div>
       </div>
     </nav>`;

@@ -156,6 +156,7 @@
             <img src="assets/img/logo-pkp.png" alt="Kementerian PKP">
           </div>
           <nav class="nav nav-modules" aria-label="Navigasi utama">
+            <a class="nav-button nav-home" href="index.html"><span class="nav-icon">${icon('home')}</span><span class="nav-label">Dashboard</span></a>
             <div class="nav-group">
               <div class="nav-group-title"><span class="nav-icon">${icon('fileCheck')}</span><span class="nav-label">Tunjangan Kinerja</span></div>
               <div class="nav-submenu">
@@ -166,8 +167,8 @@
             <div class="nav-group active-group">
               <div class="nav-group-title"><span class="nav-icon">${icon('clock')}</span><span class="nav-label">Lembur</span></div>
               <div class="nav-submenu">
-                <a class="nav-sub-button ${lemburProcessActive ? 'active' : ''}" data-nav="process" href="index.html#process"><span class="nav-sub-dot"></span><span>Proses Lembur</span></a>
-                <a class="nav-sub-button ${lemburHistoryActive ? 'active' : ''}" data-nav="history" href="index.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
+                <a class="nav-sub-button ${lemburProcessActive ? 'active' : ''}" data-nav="process" href="lembur.html#process"><span class="nav-sub-dot"></span><span>Proses Lembur</span></a>
+                <a class="nav-sub-button ${lemburHistoryActive ? 'active' : ''}" data-nav="history" href="lembur.html#history"><span class="nav-sub-dot"></span><span>Riwayat</span></a>
               </div>
             </div>
           </nav>
@@ -579,10 +580,10 @@
   }
 
   function bindEvents() {
-    document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',(event)=>{ event.preventDefault(); const target=btn.dataset.nav; if(target==='process') resetProcess(); else { state.view=target; state.editingHistoryId=null; } history.replaceState(null,'',`index.html#${target}`); render(); }));
-    document.querySelector('[data-action="enter-app"]')?.addEventListener('click',()=>{ state.started=true; resetProcess(); history.replaceState(null,'','index.html#process'); render(); });
-    document.querySelector('[data-action="start-process"]')?.addEventListener('click',()=>{ resetProcess(); history.replaceState(null,'','index.html#process'); render(); });
-    document.querySelector('[data-action="go-history"]')?.addEventListener('click',()=>{ state.view='history'; state.editingHistoryId=null; history.replaceState(null,'','index.html#history'); render(); });
+    document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',(event)=>{ event.preventDefault(); const target=btn.dataset.nav; if(target==='process') resetProcess(); else { state.view=target; state.editingHistoryId=null; } history.replaceState(null,'',`lembur.html#${target}`); render(); }));
+    document.querySelector('[data-action="enter-app"]')?.addEventListener('click',()=>{ state.started=true; resetProcess(); history.replaceState(null,'','lembur.html#process'); render(); });
+    document.querySelector('[data-action="start-process"]')?.addEventListener('click',()=>{ resetProcess(); history.replaceState(null,'','lembur.html#process'); render(); });
+    document.querySelector('[data-action="go-history"]')?.addEventListener('click',()=>{ state.view='history'; state.editingHistoryId=null; history.replaceState(null,'','lembur.html#history'); render(); });
 
     document.getElementById('period-month')?.addEventListener('change',(e)=>{ state.period.month=Number(e.target.value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; render(); });
     document.getElementById('period-year')?.addEventListener('change',(e)=>{ state.period.year=Number(e.target.value); state.holidays=state.holidays.filter((key)=>dateBelongsToPeriod(key,state.period)); state.validation=null; render(); });
@@ -604,8 +605,8 @@
     document.querySelector('[data-action="generate"]')?.addEventListener('click',generateDocs);
     document.querySelector('[data-action="save-history-edit"]')?.addEventListener('click',generateDocs);
     document.querySelector('[data-action="cancel-history-edit"]')?.addEventListener('click',cancelHistoryEdit);
-    document.querySelector('[data-action="go-dashboard"]')?.addEventListener('click',()=>{resetProcess(); history.replaceState(null,'','index.html#process'); render();});
-    document.querySelector('[data-action="new-period"]')?.addEventListener('click',()=>{resetProcess(); history.replaceState(null,'','index.html#process'); render();});
+    document.querySelector('[data-action="go-dashboard"]')?.addEventListener('click',()=>{resetProcess(); history.replaceState(null,'','lembur.html#process'); render();});
+    document.querySelector('[data-action="new-period"]')?.addEventListener('click',()=>{resetProcess(); history.replaceState(null,'','lembur.html#process'); render();});
     document.querySelector('[data-action="edit-current-run"]')?.addEventListener('click',()=>{ if(state.currentRun?.id) editHistory(state.currentRun.id); });
     document.querySelectorAll('[data-history-id]').forEach(btn=>btn.addEventListener('click',()=>openHistory(btn.dataset.historyId)));
     document.querySelectorAll('[data-edit-history-id]').forEach(btn=>btn.addEventListener('click',()=>editHistory(btn.dataset.editHistoryId)));
